@@ -1,0 +1,154 @@
+<launch>
+  <arg name="world_file" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
+  <arg name="map_file" default="/home/gemy/catkin_ws/src/multirobot_sim/maps/map.yaml"/>
+  <arg name="mav_model" default="pelican"/>
+  <arg name="turtle_model" default="waffle"/>
+  <arg name="first_tb3"  default="ugv1"/>
+  <arg name="second_tb3" default="ugv2"/>
+  <arg name="first_ar2" value="uav1" />
+  <arg name="second_ar2" value="uav2" />
+
+
+  <arg name="first_tb3_x_pos" default="-2.0"/>
+  <arg name="first_tb3_y_pos" default="0.0"/>
+  <arg name="first_tb3_z_pos" default=" 0.0"/>
+  <arg name="first_tb3_yaw"   default=" 1.57"/>
+
+  <arg name="second_tb3_x_pos" default="2.0"/>
+  <arg name="second_tb3_y_pos" default="0.0"/>
+  <arg name="second_tb3_z_pos" default=" 0.0"/>
+  <arg name="second_tb3_yaw"   default=" 1.57"/>
+
+  <arg name="first_ar2_x_pos" default="-1.0" />
+  <arg name="first_ar2_y_pos" default="0.0" />
+  <arg name="first_ar2_z_pos" default="0.0" />
+  <arg name="first_ar2_roll" default="0.0"/>
+  <arg name="first_ar2_pitch" default="0.0"/>
+  <arg name="first_ar2_yaw" default="0.0"/>
+
+  <arg name="second_ar2_x_pos" default="1.0" />
+  <arg name="second_ar2_y_pos" default="-1.0" />
+  <arg name="second_ar2_z_pos" default="0.0" />
+  <arg name="second_ar2_roll" default="0.0"/>
+  <arg name="second_ar2_pitch" default="0.0"/>
+  <arg name="second_ar2_yaw" default="0.0"/>
+
+  <arg name="robots" default="ugv1:ugv,ugv2:ugv,uav1:uav,uav2:uav"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world_file)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>  
+
+  <group ns = "$(arg first_tb3)">
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg turtle_model).urdf.xacro" />
+
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model $(arg first_tb3) -x $(arg first_tb3_x_pos) -y $(arg first_tb3_y_pos) -z $(arg first_tb3_z_pos) -param robot_description" />
+  
+<node pkg="joint_state_publisher" type="joint_state_publisher" name="joint_state_publisher">
+    <param name="use_gui" value="true"/>
+    <param name="rate" value="50"/>
+  </node>
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="50.0" />
+  </node>
+<!-- AMCL -->
+  <include file="$(find turtlebot3_navigation)/launch/amcl.launch"/>
+
+  <!-- move_base -->
+     <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/costmap_common_params.yaml" command="load" ns="global_costmap" /> 
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/costmap_common_params.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/local_costmap_params.yaml" command="load" />
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/global_costmap_params.yaml" command="load" /> 
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/base_local_planner_params.yaml" command="load" />
+ </node>
+
+  </group>
+
+  <group ns = "$(arg second_tb3)">
+    <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg turtle_model).urdf.xacro" />
+
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model $(arg second_tb3) -x $(arg second_tb3_x_pos) -y $(arg second_tb3_y_pos) -z $(arg second_tb3_z_pos) -param robot_description" />
+  
+<node pkg="joint_state_publisher" type="joint_state_publisher" name="joint_state_publisher">
+    <param name="use_gui" value="true"/>
+    <param name="rate" value="50"/>
+  </node>
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="50.0" />
+  </node>
+<!-- AMCL -->
+  <include file="$(find turtlebot3_navigation)/launch/amcl.launch"/>
+
+  <!-- move_base -->
+     <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/costmap_common_params.yaml" command="load" ns="global_costmap" /> 
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/costmap_common_params.yaml" command="load" ns="local_costmap" />
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/local_costmap_params.yaml" command="load" />
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/global_costmap_params.yaml" command="load" /> 
+    <rosparam file="/home/gemy/catkin_ws/src/multirobot_sim/param/base_local_planner_params.yaml" command="load" />
+ </node>
+
+  </group>
+
+ <group ns = "$(arg first_ar2)">
+     <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
+      <arg name="mav_name" value="$(arg mav_model)" />
+      <arg name="model" value="$(find rotors_description)/urdf/mav_generic_odometry_sensor.gazebo" />
+      <arg name="enable_logging" value="false" />
+      <arg name="enable_ground_truth" value="true" />
+      <arg name="log_file" value="$(arg first_ar2)"/>
+      <arg name="namespace" value="$(arg first_ar2)"/>
+      <arg name="x" value="$(arg first_ar2_x_pos)"/>
+      <arg name="y" value="$(arg first_ar2_y_pos)"/>
+      <arg name="z" value="$(arg first_ar2_z_pos)"/>
+    </include>
+    <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_$(arg mav_model).yaml" />
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/$(arg mav_model).yaml" />
+      <remap from="odometry" to="odometry_sensor1/odometry" />
+    </node>
+    <node name="hovering_example" pkg="rotors_gazebo" type="hovering_example" output="screen"/>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+  </group>
+
+   <group ns = "$(arg second_ar2)">
+     <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
+      <arg name="mav_name" value="$(arg mav_model)" />
+      <arg name="model" value="$(find rotors_description)/urdf/mav_generic_odometry_sensor.gazebo" />
+      <arg name="enable_logging" value="false" />
+      <arg name="enable_ground_truth" value="true" />
+      <arg name="log_file" value="$(arg second_ar2)"/>
+      <arg name="namespace" value="$(arg second_ar2)"/>
+      <arg name="x" value="$(arg second_ar2_x_pos)"/>
+      <arg name="y" value="$(arg second_ar2_y_pos)"/>
+      <arg name="z" value="$(arg second_ar2_z_pos)"/>
+    </include>
+    <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_$(arg mav_model).yaml" />
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/$(arg mav_model).yaml" />
+      <remap from="odometry" to="odometry_sensor1/odometry" />
+    </node>
+    <node name="hovering_example" pkg="rotors_gazebo" type="hovering_example" output="screen"/>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+  </group>
+
+  <!-- Map server -->
+  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
+
+  <!-- Turtle Monitor -->
+<node pkg="multirobot_sim" type="turtle_monitor.py" name="turtle_monitor" output="screen">
+<param name="robots" value="$(arg robots)"/>
+<param name="map" value="/map"/>
+</node>
+
+ 
+</launch>
+

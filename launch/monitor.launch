@@ -1,0 +1,19 @@
+<launch>
+  <arg name="world_file" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
+  <arg name="map_file" default="/home/gemy/catkin_ws/src/multirobot_sim/maps/map.yaml"/>
+
+  <arg name="robots" default="[]"/>
+
+
+  <!-- Map server -->
+  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
+
+  <!-- Turtle Monitor -->
+<node pkg="multirobot_sim" type="turtle_monitor.py" name="turtle_monitor" output="screen" required="true">
+<param name="robots" value="$(arg robots)"/>
+<param name="map" value="/map"/>
+</node>
+
+ 
+</launch>
+

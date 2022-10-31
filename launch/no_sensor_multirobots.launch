@@ -1,0 +1,70 @@
+<launch>
+    <arg name="world_name" value=""/>
+
+  <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="first_tb3"  default="tb3_1"/>
+  <arg name="second_tb3" default="tb3_2"/>
+  <arg name="first_ar2" value="ar2_1" />
+  <arg name="second_ar2" value="ar2_2" />
+
+
+  <arg name="first_tb3_x_pos" default="-2.0"/>
+  <arg name="first_tb3_y_pos" default="0.0"/>
+  <arg name="first_tb3_z_pos" default=" 0.0"/>
+  <arg name="first_tb3_yaw"   default=" 1.57"/>
+
+  <arg name="second_tb3_x_pos" default="2.0"/>
+  <arg name="second_tb3_y_pos" default="0.0"/>
+  <arg name="second_tb3_z_pos" default=" 0.0"/>
+  <arg name="second_tb3_yaw"   default=" 1.57"/>
+
+  <arg name="first_ar2_x_pos" default="-1.0" />
+  <arg name="first_ar2_y_pos" default="0.0" />
+  <arg name="first_ar2_z_pos" default="0.0" />
+  <arg name="first_ar2_roll" default="0.0"/>
+  <arg name="first_ar2_pitch" default="0.0"/>
+  <arg name="first_ar2_yaw" default="0.0"/>
+
+  <arg name="second_ar2_x_pos" default="1.0" />
+  <arg name="second_ar2_y_pos" default="-1.0" />
+  <arg name="second_ar2_z_pos" default="0.0" />
+  <arg name="second_ar2_roll" default="0.0"/>
+  <arg name="second_ar2_pitch" default="0.0"/>
+  <arg name="second_ar2_yaw" default="0.0"/>
+
+
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world_name)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>  
+
+  <group ns = "$(arg first_tb3)">
+    <param name="robot_description" value="$(arg first_tb3)" />
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg first_tb3)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+        args="-file /home/gemy/catkin_ws/src/multirobot_sim/models/turtlebot3_waffle/model.sdf -sdf -x $(arg first_tb3_x_pos) -y $(arg first_tb3_y_pos) -z $(arg first_tb3_z_pos) -Y $(arg first_tb3_yaw) -model $(arg first_tb3)"/>
+  </group>
+
+
+ <group ns = "$(arg first_ar2)">
+     <param name="robot_description" value="$(arg first_ar2) description" />
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg first_ar2)" />
+    </node>
+     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" respawn="false" output="screen"
+        args="-file /home/gemy/catkin_ws/src/multirobot_sim/models/sjtu_drone/sjtu_drone.sdf -sdf -x $(arg first_ar2_x_pos) -y $(arg first_ar2_y_pos) -z $(arg first_ar2_z_pos) -R $(arg first_ar2_roll) -P $(arg first_ar2_pitch) -Y $(arg first_ar2_yaw) -model $(arg first_ar2)"/>
+  </group>
+
+ 
+</launch>

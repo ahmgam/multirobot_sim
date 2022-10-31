@@ -1,0 +1,102 @@
+
+<launch>
+  <arg name="world_name" default="basic"/>
+  <arg name="enable_logging" default="false"/>
+  <arg name="enable_ground_truth" default="true"/>
+  <arg name="paused" value="false"/>
+  <arg name="model_name" default="waffle"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find turtlebot3_gazebo)/worlds/turtlebot3_house.world"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+ 
+ <arg name="ugv1_name" default="ugv1"/>
+ <arg name="ugv2_name" default="ugv2"/>
+ <arg name="uav1_name" default="uav1"/>
+ <arg name="uav2_name" default="uav2"/>
+
+  <group ns="$(arg ugv1_name)">
+  <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="x_pos" default="-2.0"/>
+  <arg name="y_pos" default="-0.5"/>
+  <arg name="z_pos" default="0.0"/>
+
+  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model $(arg ugv1_name) -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -param robot_description " output="screen" />
+   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="50.0" />
+    <param name="tf_prefix" value="$(arg ugv1_name)"/>
+  </node>
+  <node pkg="move_base" type="move_base" respawn="false" name="move_base" output="screen">
+    <rosparam file="$(find multirobot_sim)/param/costmap_common_params.yaml" command="load" ns="global_costmap" /> 
+    <rosparam file="$(find multirobot_sim)/param/costmap_common_params.yaml" command="load" ns="local_costmap" />
+    <rosparam file="$(find multirobot_sim)/param/local_costmap_params.yaml" command="load" />
+    <rosparam file="$(find multirobot_sim)/param/global_costmap_params.yaml" command="load" /> 
+    <rosparam file="$(find multirobot_sim)/param/base_local_planner_params.yaml" command="load" />
+ </node>
+  </group>
+  <group ns="$(arg ugv2_name)">
+  <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="x_pos" default="-2.0"/>
+  <arg name="y_pos" default="-0.5"/>
+  <arg name="z_pos" default="0.0"/>
+
+  <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
+
+ <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model $(arg ugv2_name) -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -param robot_description " output="screen" />
+   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" type="double" value="50.0" />
+    <param name="tf_prefix" value="$(arg ugv2_name)"/>
+      </node>
+  
+  </group>
+
+    
+
+  <group ns="$(arg uav1_name)">
+    <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
+      <arg name="mav_name" value="pelican" />
+      <arg name="namespace" value="$(arg uav1_name)" />
+      <arg name="model" value="$(find rotors_description)/urdf/mav_generic_odometry_sensor.gazebo" />
+      <arg name="enable_logging" value="true" />
+      <arg name="enable_ground_truth" value="true" />
+      <arg name="log_file" value="pelican"/>
+      <arg name="y" value="1.0"/>
+    </include>
+    <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_pelican.yaml" />
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/pelican.yaml" />
+      <remap from="odometry" to="odometry_sensor1/odometry" />
+    </node>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+    <node name="waypoint_publisher" pkg="rotors_gazebo" type="waypoint_publisher" output="screen" args="0 1 1 0 5"/>
+  </group>
+
+
+  <group ns="$(arg uav2_name)">
+    <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
+      <arg name="mav_name" value="pelican" />
+      <arg name="namespace" value="$(arg uav2_name)" />
+      <arg name="model" value="$(find rotors_description)/urdf/mav_generic_odometry_sensor.gazebo" />
+      <arg name="enable_logging" value="$(arg enable_logging)" />
+      <arg name="enable_ground_truth" value="$(arg enable_ground_truth)" />
+      <arg name="log_file" value="pelican"/>
+      <arg name="y" value="1.0"/>
+    </include>
+    <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_pelican.yaml" />
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/pelican.yaml" />
+      <remap from="odometry" to="odometry_sensor1/odometry" />
+    </node>
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+    <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+    <node name="waypoint_publisher" pkg="rotors_gazebo" type="waypoint_publisher" output="screen" args="0 1 1 0 5"/>
+  </group>
+</launch>
