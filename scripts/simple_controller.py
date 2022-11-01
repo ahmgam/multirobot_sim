@@ -135,8 +135,8 @@ if __name__ == '__main__':
     rospy.loginfo("simple_controller:Starting loop")
     while not rospy.is_shutdown():
         #get current position
-        if goal is not None:
-            odom_msg = getOdomMsg(odom_topic)
+        odom_msg = getOdomMsg(odom_topic)
+        if goal is not None and not is_reached(odom_msg, goal):
             #calculate twist
             heading_angle = getHeadingAngle(odom_msg)
             goal_angle = getGoalHeading(odom_msg,goal)
@@ -153,4 +153,7 @@ if __name__ == '__main__':
             twist = calculateTwist(angleCtrl, distanceCtrl)
             #publish twist
             pub.publish(twist)
+        else:
+            #publish zero twist
+            pub.publish(Twist())
         rate.sleep()
