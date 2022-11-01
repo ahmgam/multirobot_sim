@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 import rospy
-from math import sqrt, atan2
+from math import sqrt, atan2,pi,copysign
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion
+
 goal = None
 
 WHEEL_DIAMETER = 0.066
@@ -66,6 +67,7 @@ def getHeadingAngle(odom_msg):
 
 def getGoalHeading(odom_msg,goal):
     return atan2(goal.pose.position.y - odom_msg.pose.pose.position.y,goal.pose.position.x - odom_msg.pose.pose.position.x)
+    
 
 def getDistance(odom_msg,goal):
     return sqrt(
@@ -73,15 +75,22 @@ def getDistance(odom_msg,goal):
         (odom_msg.pose.pose.position.y - goal.pose.position.y )**2
     )
     
+def getDifferenceAngle(goal_angle,heading_angle):
+    difference_angle = goal_angle - heading_angle  
+    if difference_angle > pi:
+        difference_angle = difference_angle - 2*pi
+    elif difference_angle < -pi:
+        difference_angle = difference_angle + 2*pi
+    return difference_angle
+
 def is_reached(odom_msg, goal):
     return getDistance(odom_msg, goal) < TOLERANCE
 
 def calculateTwist(angleCtl, distanceCtl):
     twist = Twist()
     twist.linear.x = min(abs(distanceCtl), MAX_LINEAR_SPEED)
-    twist.angular.z = -min(abs(angleCtl), MAX_ANGULAR_SPEED)
+    twist.angular.z = copysign(min(abs(angleCtl), MAX_ANGULAR_SPEED),angleCtl)
     return twist
-
 
 def callback(msg):
     global goal
@@ -118,7 +127,7 @@ if __name__ == '__main__':
     #initialize node
     rospy.loginfo("simple_controller:Initializing node")
     rospy.init_node('simple_controller', anonymous=True)
-    rate = rospy.Rate(10) # 10hz
+    rate = rospy.Rate(20) # 10hz
     #create subscriber
     rospy.loginfo("simple_controller:Creating subscriber")
     #wait for topic to be published
@@ -127,29 +136,30 @@ if __name__ == '__main__':
     #create publisher
     rospy.loginfo("simple_controller:Creating publisher")
     pub = rospy.Publisher(cmd_topic, Twist, queue_size=10)
-    headingController = PID(0.5,0,0)
+    headingController = PID(0.5,0.1,0)
     headingController.setGoal(0)
 
-    distanceController = PID(1,0,0)
+    distanceController = PID(1,0.1,0)
     distanceController.setGoal(0)
     rospy.loginfo("simple_controller:Starting loop")
     while not rospy.is_shutdown():
         #get current position
         odom_msg = getOdomMsg(odom_topic)
         if goal is not None and not is_reached(odom_msg, goal):
-            #calculate twist
+            #heading ang goal angles
             heading_angle = getHeadingAngle(odom_msg)
             goal_angle = getGoalHeading(odom_msg,goal)
-            difference_angle = heading_angle - goal_angle
+            #get difference between heading and goal
+            difference_angle = getDifferenceAngle(goal_angle,heading_angle) 
+            #get distance to goal
             distance = getDistance(odom_msg,goal)
-
+            #update controllers
             headingController.update(difference_angle,rospy.get_time())
             distanceController.update(distance,rospy.get_time())
-
+            #calculate control signals
             angleCtrl = headingController.calculate()
             distanceCtrl = distanceController.calculate()
-
-            #headingController.log()
+            #calculate twist
             twist = calculateTwist(angleCtrl, distanceCtrl)
             #publish twist
             pub.publish(twist)
