@@ -34,11 +34,9 @@ class PyMonitor:
     rospy.init_node('pymonitor', anonymous=True)
     #parse robots
     rospy.loginfo("PyMonitor: Parsing robots")
-
     self.robots=self.parseRobots(self.robots)
     #get map message from map topic
     rospy.loginfo("PyMonitor: getting map")
-    
     self.map_msg = self.getMap()
     #get map metadata
     map_meta = self.map_msg.info
@@ -57,12 +55,12 @@ class PyMonitor:
     self.cursor.set_alpha(50)
     #initialize turtles
     rospy.loginfo("PyMonitor: Initializing Robots ")
-    self.surfaces = initializeSurfaces(self.robots,self.scale,map_meta.resolution)
+    self.surfaces = self.initializeSurfaces(self.robots,self.scale,map_meta.resolution)
 
     rospy.loginfo("PyMonitor: Robots initialized")
     #subscribe to robot position topic
     rospy.loginfo("PyMonitor: Subscribing to robot position topic")
-    model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+    self.model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
     self.rate = rospy.Rate(10) # 10hz
     # spin() simply keeps python from exiting until this node is stopped
     rospy.loginfo("PyMonitor: Spinning")
@@ -210,11 +208,11 @@ class PyMonitor:
   
   def rendreBackground(self):
     self.screen.fill((255,255,255))
-    self.screen.blit(bg, (0,0))
+    self.screen.blit(self.bg, (0,0))
 
   def updateRobotCoordinates(self,robot):
     pass
-    resp_coordinates = model_coordinates(robot["model_name"], "world")
+    resp_coordinates = self.model_coordinates(robot["model_name"], "world")
     (roll, pitch, yaw) =euler_from_quaternion((
       resp_coordinates.pose.orientation.x,
       resp_coordinates.pose.orientation.y,
@@ -224,183 +222,92 @@ class PyMonitor:
     x=resp_coordinates.pose.position.x
     y=resp_coordinates.pose.position.y
     z=resp_coordinates.pose.position.z
-    return (x,y,z),self.worldToPixel(x,y,map_meta.origin.position.x,map_meta.origin.position.y,map_meta.resolution,scale)
+    return (x,y,z),self.worldToPixel(x,y,self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
+  
+  def publishGoal(self,robot):
+    if robot["goal"] is not None:
+      if robot["type"] == "ugv":
+        topic = f'/{robot["name"]}{UGV_GOAL_TOPIC}'
+      if robot["type"] == "uav":
+        topic = f'/{robot["name"]}{UAV_GOAL_TOPIC}'
+      pub = rospy.Publisher(topic, PoseStamped, queue_size=10)
+      pub.publish(self.createGoal(*robot["goal"]))  
 
-  def loop(self):
-    pass
-    #diaply map
-    self.rendreBackground()
-    
+  def watchForGoal(self,robot):
+    if robot["goal"] is not None and self.inTolerance(*robot["loc"],*robot["goal"],TOLERANCE):
+      rospy.loginfo(f"PyMonitor: Robot {robot['name']} reached goal")
+      return None
+    return robot["goal"]
+
+  def rendreGoal(self,robot):
+    if robot["goal"] is not None:
+      goalLoc = robot['goal'][0],robot['goal'][1]
+      goal = self.worldToPixel(*goalLoc,self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
+      pygame.draw.circle(self.screen, (0,0,255), goal, 5)
+
+  def rendreRobot(self,robot):
+    if robot["loc"] is not None:
+      self.screen.blit(robot["surface"],(robot["pos"][0],robot["pos"][1]))
+
+  def updateScreen(self):
     #update robots coordinates
     for t in self.surfaces:
       try:
         #update robot coordinates
         t["loc"],t["pos"] = self.updateRobotCoordinates(t)
         #prodcasting goal to robot is exist
-        if t["goal"] is not None:
-          if t["type"] == "ugv":
-            topic = f'/{t["name"]}{UGV_GOAL_TOPIC}'
-          if t["type"] == "uav":
-            topic = f'/{t["name"]}{UAV_GOAL_TOPIC}'
-          pub = rospy.Publisher(topic, PoseStamped, queue_size=10)
-          pub.publish(self.createGoal(*t["goal"]))  
-          if self.inTolerance(*t["loc"],*t["goal"],TOLERANCE):
-            print(f"Robot {t['name']} reached goal")
-            t["goal"] = None   
-    
-        #print(f"robot {t['model_name']} position : {t['pos']} , real position : ({round(resp_coordinates.pose.position.x)},{round(resp_coordinates.pose.position.y)})")
-        screen.blit(t["surface"],(t["pos"][0],t["pos"][1]))
+        self.publishGoal(t)
+        #check goal status
+        t["goal"] = self.watchForGoal(t)  
+        #rendre goal
+        self.rendreGoal(t)
+        #rendre robot
+        self.rendreRobot(t)
       except rospy.ServiceException as e:
         rospy.loginfo("Get Model State service call failed:  {0}".format(e))
-    #update cursor position
-    if activeIndex is not None:
-      screen.blit(cursor,(surfaces[activeIndex]["pos"][0],surfaces[activeIndex]["pos"][1]))
+
+  def highlightSelectedRobot(self):
+    if self.activeIndex is not None:
+      self.screen.blit(self.cursor,(self.surfaces[self.activeIndex]["pos"][0],self.surfaces[self.activeIndex]["pos"][1]))
     else :
-      screen.blit(cursor,(0,0))
-    pygame.display.update()
-    #get mouse events :
+      self.screen.blit(self.cursor,(0,0))
+
+  def handleMouseClick(self):
     for event in pygame.event.get():
       #print(event)
       if event.type == pygame.MOUSEBUTTONUP:
-        print(f"button up found, and key is {event.button}")
         if event.button == 1:
-          for i in range(len(surfaces)):
-            #print(f"pose is {surfaces[i]['pos']}")
-            #print(f"mouse is {event.pos}")
-            #print(f"relative pos x is :{event.pos[0] - surfaces[i]['pos'][0]} and y is:{event.pos[1]-surfaces[i]['pos'][1]}")
-            #if surfaces[i]["surface"].get_rect().collidepoint(event.pos):
-            if insideRect(event.pos,surfaces[i]["pos"],surfaces[i]["surface"]):
-              activeIndex = i
-              print(f"robot {surfaces[activeIndex]['name']} is active")
-          if activeIndex is not None:
+          for i in range(len(self.surfaces)):
+            if self.insideRect(event.pos,self.surfaces[i]["pos"],self.surfaces[i]["surface"]):
+              self.activeIndex = i
+              print(f"robot {self.surfaces[self.activeIndex]['name']} is active")
+          if self.activeIndex is not None:
             #prodcast goal to /ugv1/move_base_simple/goal topic
-            pos = pixelToWorld(event.pos[0],event.pos[1],map_meta.origin.position.x,map_meta.origin.position.y,map_meta.resolution,scale)
-            pos = (pos[0],pos[1],0 if surfaces[activeIndex]["type"] == "ugv" else ELEVATION)
-            surfaces[activeIndex]["goal"] = pos
-       
+            pos = self.pixelToWorld(event.pos[0],event.pos[1],self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
+            pos = (pos[0],pos[1],0 if self.surfaces[self.activeIndex]["type"] == "ugv" else ELEVATION)
+            self.surfaces[self.activeIndex]["goal"] = pos
         if event.button == 3:
-          activeIndex = None
+          self.activeIndex = None
         if event.button ==2:
-          surfaces[activeIndex]["goal"] = None
-    #prodcat goal to /ugv1/move_base_simple/goal topic
+          self.surfaces[self.activeIndex]["goal"] = None
     
-    rate.sleep()
+  def loop(self):
+    #diaply map
+    self.rendreBackground()
+    #update screen
+    self.updateScreen()
+    #update cursor position
+    self.highlightSelectedRobot()
+    #update screen
+    pygame.display.update()
+    #get mouse events :
+    self.handleMouseClick()
+    #sleep
+    self.rate.sleep()
 
 if __name__ == '__main__':
-  
-
-  #initialize node
-  print("Initializing node")
-  rospy.init_node('pymonitor', anonymous=True)
-  #parse robots
-  print("Parsing robots")
-
-  robots = parseRobots(robots)
-  #get map message from map topic
-  print("getting map")
-  
-  map_msg = getMap().map
-  print(f"map type : {type(map_msg)}")
-  #get map metadata
-  map_meta = map_msg.info
-  print(f"map metadata : {map_meta}")
-  #get scales
-  xScale = size[0]/map_meta.width
-  yScale = size[1]/map_meta.height
-  scale=(xScale,yScale)
-  #display map
-  print("Displaying map")
-  bg,screen = displayMap(map_msg,scale)
-  
-
-  
-  cursor = pygame.Surface((30,30))
-  pygame.draw.rect(cursor,(255,0,0),(0,0,30,30))
-  cursor.fill((0,255,0))
-  #change cursor transparency
-  cursor.set_alpha(50)
-  #s = turtle.Screen()
-  #s.setup(map_meta.width/map_meta.resolution, map_meta.height/map_meta.resolution, 0, 0)
-  #initialize turtles
-  print("Initializing turtles :", robots)
-  surfaces = initializeSurfaces(robots,scale,map_meta.resolution)
-
-  print("Turtles initialized")
-  #subscribe to robot position topic
-  print("Subscribing to robot position topic")
-  model_coordinates = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
-  rate = rospy.Rate(10) # 10hz
-  # spin() simply keeps python from exiting until this node is stopped
-  print("Spinning")
-  activeIndex = None
+  monitor = PyMonitor()
   while not rospy.is_shutdown():
-    #diaply map
-    screen.fill((255,255,255))
-    screen.blit(bg, (0,0))
-    
-    #update robots coordinates
-    for t in surfaces:
-      try:
-        resp_coordinates = model_coordinates(t["model_name"], "world")
-        (roll, pitch, yaw) =euler_from_quaternion((
-          resp_coordinates.pose.orientation.x,
-          resp_coordinates.pose.orientation.y,
-          resp_coordinates.pose.orientation.z,
-          resp_coordinates.pose.orientation.w
-        ))
-        x=resp_coordinates.pose.position.x
-        y=resp_coordinates.pose.position.y
-        z=resp_coordinates.pose.position.z
-        t["loc"]= (x,y,z)
-        t["pos"] = worldToPixel(x,y,map_meta.origin.position.x,map_meta.origin.position.y,map_meta.resolution,scale)
-        #prodcasting goal to robot is exist
-        if t["goal"] is not None:
-          if t["type"] == "ugv":
-            topic = f'/{t["name"]}{UGV_GOAL_TOPIC}'
-          if t["type"] == "uav":
-            topic = f'/{t["name"]}{UAV_GOAL_TOPIC}'
-          pub = rospy.Publisher(topic, PoseStamped, queue_size=10)
-          pub.publish(createGoal(*t["goal"]))  
-          if inTolerance(*t["loc"],*t["goal"],TOLERANCE):
-            print(f"Robot {t['name']} reached goal")
-            t["goal"] = None   
-    
-        #print(f"robot {t['model_name']} position : {t['pos']} , real position : ({round(resp_coordinates.pose.position.x)},{round(resp_coordinates.pose.position.y)})")
-        screen.blit(t["surface"],(t["pos"][0],t["pos"][1]))
-      except rospy.ServiceException as e:
-        rospy.loginfo("Get Model State service call failed:  {0}".format(e))
-    #update cursor position
-    if activeIndex is not None:
-      screen.blit(cursor,(surfaces[activeIndex]["pos"][0],surfaces[activeIndex]["pos"][1]))
-    else :
-      screen.blit(cursor,(0,0))
-    pygame.display.update()
-    #get mouse events :
-    for event in pygame.event.get():
-      #print(event)
-      if event.type == pygame.MOUSEBUTTONUP:
-        print(f"button up found, and key is {event.button}")
-        if event.button == 1:
-          for i in range(len(surfaces)):
-            #print(f"pose is {surfaces[i]['pos']}")
-            #print(f"mouse is {event.pos}")
-            #print(f"relative pos x is :{event.pos[0] - surfaces[i]['pos'][0]} and y is:{event.pos[1]-surfaces[i]['pos'][1]}")
-            #if surfaces[i]["surface"].get_rect().collidepoint(event.pos):
-            if insideRect(event.pos,surfaces[i]["pos"],surfaces[i]["surface"]):
-              activeIndex = i
-              print(f"robot {surfaces[activeIndex]['name']} is active")
-          if activeIndex is not None:
-            #prodcast goal to /ugv1/move_base_simple/goal topic
-            pos = pixelToWorld(event.pos[0],event.pos[1],map_meta.origin.position.x,map_meta.origin.position.y,map_meta.resolution,scale)
-            pos = (pos[0],pos[1],0 if surfaces[activeIndex]["type"] == "ugv" else ELEVATION)
-            surfaces[activeIndex]["goal"] = pos
-       
-        if event.button == 3:
-          activeIndex = None
-        if event.button ==2:
-          surfaces[activeIndex]["goal"] = None
-    #prodcat goal to /ugv1/move_base_simple/goal topic
-    
-    rate.sleep()
+    monitor.loop()
   rospy.spin()
   
