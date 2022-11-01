@@ -7,9 +7,6 @@ from tf.transformations import euler_from_quaternion
 import numpy as np
 import pygame
 from cv2 import resize,imread
-import actionlib
-#from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
-#import poseStamped message
 from geometry_msgs.msg import PoseStamped
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5

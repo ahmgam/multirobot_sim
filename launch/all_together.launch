@@ -17,6 +17,13 @@
   <arg name="uav_y_3" default="3.0"/>
   <arg name="elevation" default="1.0"/>
   <arg name="verbose" default="false"/>
+  <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="ugv_name_1" default="ugv1"/>
+  <arg name="ugv_name_2" default="ugv2"/>
+  <arg name="ugv_name_3" default="ugv3"/>
+  <arg name="ugv_x_1" default="1.0"/>
+  <arg name="ugv_x_2" default="2.0"/>
+  <arg name="ugv_x_3" default="3.0"/>
   <!-- Load the world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world_file)" />
@@ -25,7 +32,7 @@
     <arg name="gui" value="$(arg gui)" />
     <arg name="verbose" value="$(arg verbose)"/>
   </include>
-  <!-- Spawn robot 1-->
+  <!-- Spawn uav 1-->
   <include file="$(find multirobot_sim)/launch/uav.launch">
     <arg name="robot_name" value="$(arg uav_name_1)"/>
     <arg name="mav_name" value="$(arg mav_name)"/>
@@ -33,7 +40,7 @@
     <arg name="y" value="$(arg uav_y_1)"/>
     <arg name="z" value="$(arg elevation)"/>
   </include>
-  <!-- Spawn robot 2-->
+  <!-- Spawn uav 2-->
   <include file="$(find multirobot_sim)/launch/uav.launch">
     <arg name="robot_name" value="$(arg uav_name_2)"/>
     <arg name="mav_name" value="$(arg mav_name)"/>
@@ -41,7 +48,7 @@
     <arg name="y" value="$(arg uav_y_2)"/>
     <arg name="z" value="$(arg elevation)"/>
   </include>
-  <!-- Spawn robot 3-->
+  <!-- Spawn uav 3-->
   <include file="$(find multirobot_sim)/launch/uav.launch">
     <arg name="robot_name" value="$(arg uav_name_3)"/>
     <arg name="mav_name" value="$(arg mav_name)"/>
@@ -49,11 +56,29 @@
     <arg name="y" value="$(arg uav_y_3)"/>
     <arg name="z" value="$(arg elevation)"/>
   </include>
+   <!-- Spawn the ugv 1-->
+  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="robot_name" value="$(arg ugv_name_1)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_1)"/>
+  </include>
+  <!-- Spawn the ugv 2-->
+  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="robot_name" value="$(arg ugv_name_2)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_2)"/>
+  </include>
+  <!-- Spawn the ugv 3-->
+  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="robot_name" value="$(arg ugv_name_3)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_3)"/>
+  </include>
   <!-- Map server -->
   <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
   <!--Monitoring package-->
   <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="true">
-    <param name="robots" value="name:uav1,,type:uav|name:uav2,,type:uav|name:uav3,,type:uav"/>
+    <param name="robots" value="name:uav1,,type:uav|name:uav2,,type:uav|name:uav3,,type:uav|name:ugv1,,type:ugv|name:ugv2,,type:ugv|name:ugv3,,type:ugv"/>
     <param name="map" value="map"/>
     <param name="size" value="(1000,1000)"/>
   </node>

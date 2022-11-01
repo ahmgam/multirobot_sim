@@ -9,9 +9,8 @@
   <arg name="x_pos" default="0.0"/>
   <arg name="y_pos" default="0.0"/>
   <arg name="z_pos" default="0.0"/>
-  
-  <!-- Turtlebot3 -->
-   <include file="$(find gazebo_ros)/launch/empty_world.launch">
+  <!-- Load the world -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
@@ -19,20 +18,20 @@
     <arg name="headless" value="false"/>
     <arg name="debug" value="false"/>
   </include>
+  <!-- Spawn the robot -->
   <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg robot_name)"/>
     <arg name="model" value="$(arg model)"/>
-    <arg name="x_pos" value="$(arg x_pos)"/>
-    <arg name="y_pos" value="$(arg y_pos)"/>
-    <arg name="z_pos" value="$(arg z_pos)"/>
+    <arg name="x" value="$(arg x_pos)"/>
+    <arg name="y" value="$(arg y_pos)"/>
+    <arg name="z" value="$(arg z_pos)"/>
   </include>
  <!-- Map server -->
   <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
-
-
-<node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="false">
-<param name="robots" value="name:ugv,,type:ugv"/>
-<param name="map" value="map"/>
-<param name="size" value="(1000,1000)"/>
-</node>
+  <!--Monitoring package-->
+  <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="false">
+    <param name="robots" value="name:ugv,,type:ugv"/>
+    <param name="map" value="map"/>
+    <param name="size" value="(1000,1000)"/>
+  </node>
 </launch>

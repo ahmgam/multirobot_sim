@@ -1,0 +1,47 @@
+<launch>
+  <!-- Arguments -->
+  <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="map_file" default="/home/gemy/catkin_ws/src/multirobot_sim/maps/map.yaml"/>
+  <arg name="world_file" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
+  <arg name="ugv_name_1" default="ugv1"/>
+  <arg name="ugv_name_2" default="ugv2"/>
+  <arg name="ugv_name_3" default="ugv3"/>
+  <arg name="ugv_x_1" default="1.0"/>
+  <arg name="ugv_x_2" default="2.0"/>
+  <arg name="ugv_x_3" default="3.0"/>
+  <!-- Load the world -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world_file)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+    <arg name="headless" value="false"/>
+    <arg name="debug" value="false"/>
+  </include>
+  <!-- Spawn the robot 1-->
+  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="robot_name" value="$(arg ugv_name_1)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_1)"/>
+  </include>
+  <!-- Spawn the robot 2-->
+  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="robot_name" value="$(arg ugv_name_2)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_2)"/>
+  </include>
+  <!-- Spawn the robot 3-->
+  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="robot_name" value="$(arg ugv_name_3)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_3)"/>
+  </include>
+ <!-- Map server -->
+  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
+  <!--Monitoring package-->
+  <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="false">
+    <param name="robots" value="name:ugv1,,type:ugv|name:ugv2,,type:ugv|name:ugv3,,type:ugv"/>
+    <param name="map" value="map"/>
+    <param name="size" value="(1000,1000)"/>
+  </node>
+</launch>
