@@ -26,6 +26,7 @@
       <param name="odom_topic" value="/$(arg robot_name)/odom"/>
       <param name="cmd_topic" value="/$(arg robot_name)/cmd_vel"/>
       <param name="goal_topic" value="/$(arg robot_name)/goal"/>
+      <param name="path_topic" value="/$(arg robot_name)/path"/>
     </node>  
   </group>
 </launch>

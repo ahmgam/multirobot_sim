@@ -34,7 +34,7 @@ class PyMonitor:
     self.robots=self.parseRobots(self.robots)
     #get map message from map topic
     rospy.loginfo("PyMonitor: getting map")
-    self.map_msg = self.getMap()
+    self.map_msg = self.getTheMap()
     #get map metadata
     map_meta = self.map_msg.info
     #get scales
@@ -147,7 +147,7 @@ class PyMonitor:
       raise ValueError("Invalid robot JSON")
     return robots
 
-  def getMap(self,mapService='static_map'):
+  def getTheMap(self,mapService='/static_map'):
     return rospy.ServiceProxy(mapService, GetMap)().map
   
   def insideRect(self,point,pos,sprite):
