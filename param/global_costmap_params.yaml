@@ -1,4 +1,0 @@
-global_costmap:
-  update_frequency: 5.0
-  rolling_window: true
-  static_map: true

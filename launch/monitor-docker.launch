@@ -1,0 +1,12 @@
+<launch>
+  <!--Arguments-->
+  <arg name="robots" default="$(env ROBOTS)"/>
+  <arg name="map" value="$(env MAP)"/>
+  <arg name="size" default="$(env SIZE)"/>
+    <!--Monitoring node-->
+  <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="true">
+    <param name="robots" value="$(arg robots)"/>
+    <param name="map" value="$(arg map)"/>
+    <param name="size" value="$(arg size)"/>
+  </node>
+</launch>

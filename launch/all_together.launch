@@ -80,6 +80,6 @@
   <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="true">
     <param name="robots" value="name:uav1,,type:uav|name:uav2,,type:uav|name:uav3,,type:uav|name:ugv1,,type:ugv|name:ugv2,,type:ugv|name:ugv3,,type:ugv"/>
     <param name="map" value="map"/>
-    <param name="size" value="(1000,1000)"/>
+    <param name="size" value="(600,600)"/>
   </node>
 </launch>
