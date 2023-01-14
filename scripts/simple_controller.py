@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import rospy
+import numpy as np
 from math import sqrt, atan2,pi,copysign
 from nav_msgs.srv import GetMap
 from nav_msgs.msg import Odometry,Path,OccupancyGrid
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion
-
+from path_planning import AStar,RTT
 goal = None
 
 WHEEL_DIAMETER = 0.066
@@ -58,30 +59,84 @@ class PID:
 
 
 class Planner:
-    def __init__(self,map):
+    def __init__(self,map,start,algorithm=None):
         self.path = Path()
         self.goal=None
         self.map = map
+        self.start= start
+        rospy.loginfo(f"map size is {len(map.data)}")
+        self.grid = self.formatGrid(self.map)
+        rospy.loginfo(f"planner:Grid formatted, shape is {self.grid.shape}")
+        self.gridInfo = self.formatGridInfo(map.info)
+        rospy.loginfo(f"planner:Grid info formatted, info is {self.gridInfo}")
+        self.algorithm = self.defineAlgorithm(algorithm)
+        rospy.loginfo(f"planner:Algorithm defined, algorithm is {type(self.algorithm)}")
+
+    def defineAlgorithm(self,algorithm):
+        if algorithm is None:
+            return None
+        if algorithm == "AStar":
+            return AStar(self.grid,self.gridInfo)
+        if algorithm == "RTT":
+            return RTT(self.grid,self.gridInfo)
+
+    def formatGrid(self,grid):
+        #convert grid to 2d array
+        return np.array(grid.data).reshape(grid.info.height,grid.info.width)
+
+    def formatGridInfo(self,info):
+        return {
+            "width":info.width,
+            "height":info.height,
+            "resolution":info.resolution,
+            "origin":(info.origin.position.x,info.origin.position.y)
+        }
+    
+    def posToGrid(self,pos):
+        x,y = pos[0],pos[1]
+        x = int((x - self.gridInfo["origin"][0])/self.gridInfo["resolution"])
+        y = int((y - self.gridInfo["origin"][1])/self.gridInfo["resolution"])
+        return (x,y)
+
+    def gridToPos(self,grid):
+        x,y = grid
+        x = x*self.gridInfo["resolution"] + self.gridInfo["origin"][0]
+        y = y*self.gridInfo["resolution"] + self.gridInfo["origin"][1]
+        return (x,y)
+
+    def parsePath(self,path):
+        formattedPath = Path()
+        formattedPath.header.frame_id = "map"
+        for node in path:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            node = self.gridToPos(node)
+            pose.pose.position.x = node[0]
+            pose.pose.position.y = node[1]
+            pose.pose.position.z = 0
+            formattedPath.poses.append(pose)
+        return formattedPath
 
     def plan(self):
-        if self.goal is None:
-            return
-        self.path = Path()
-        self.path.header.frame_id = "map"
-        pose = PoseStamped()
-        pose.header.frame_id = "map"
-        pose.pose.position.x = self.goal[0]
-        pose.pose.position.y = self.goal[1]
-        pose.pose.position.z = self.goal[2]
-        self.path.poses.append(pose)
+        if self.algorithm is None:
+            if self.goal is None:
+                return
+            self.path = self.parsePath([self.goal])
+        else :
+            self.algorithm.setStart(self.posToGrid(self.start))
+            rospy.loginfo(f"planner:Start set to {self.algorithm.start}")
+            self.algorithm.setGoal(self.posToGrid(self.goal))
+            rospy.loginfo(f"planner:Goal set to {self.algorithm.goal}")
+            self.algorithm.plan()
+            self.path = self.parsePath(self.algorithm.path)
 
-    def set_goal(self, x, y,z):
+    def setGoal(self, x, y,z):
         self.goal = (x, y,z)
-        self.plan()
+        rospy.loginfo(f"planner:Goal set to {self.goal}")
 
 
 class SimpleController:
-    def __init__(self,odom_topic,cmd_vel_topic,goal_topic,path_topic,planner=Planner,headingCntParams=(0.5,0.1,0),linearCntParams=(1,0.1,0)):
+    def __init__(self,odom_topic,cmd_vel_topic,goal_topic,path_topic,planningAlgorithm=None,headingCntParams=(0.5,0.1,0),linearCntParams=(1,0.1,0)):
         self.odom_topic=odom_topic
         self.cmd_vel_topic=cmd_vel_topic
         self.goal_topic=goal_topic
@@ -99,12 +154,6 @@ class SimpleController:
             raise rospy.ROSInterruptException("simple_controller:Error creating cmd subscriber")
 
         try:
-            rospy.loginfo("simple_controller:Creating subscriber")
-            self.goalSubscriber = rospy.Subscriber(self.goal_topic, PoseStamped,self.goalCallback,self)
-        except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException("simple_controller:Error creating goal subscriber")
-
-        try:
             rospy.loginfo("simple_controller:Creating path publisher")
             self.pathPublisher = rospy.Publisher(self.path_topic, Path, queue_size=10)
         except rospy.ROSInterruptException:
@@ -115,21 +164,34 @@ class SimpleController:
             self.map = self.getTheMap()
         except rospy.service.ServiceException:
             raise rospy.service.ServiceException("simple_controller:Error getting map")
-        self.planner = planner(self.map)
+        #get initial position
+        rospy.loginfo("simple_controller:Getting initial position")
+        odom = self.getOdomMsg()
+        self.planner = Planner(self.map,(odom.pose.pose.position.x,odom.pose.pose.position.y),planningAlgorithm)
         self.headingController =PID(*headingCntParams)
         self.distanceController = PID(*linearCntParams)
         self.goal = None
         self.pointer = None
         self.rate = rospy.Rate(20) # 10hz
+
+        try:
+            rospy.loginfo("simple_controller:Creating subscriber")
+            self.goalSubscriber = rospy.Subscriber(self.goal_topic, PoseStamped,self.goalCallback,self)
+        except rospy.ROSInterruptException:
+            raise rospy.ROSInterruptException("simple_controller:Error creating goal subscriber")
         rospy.loginfo("simple_controller:Initialized")
 
     @staticmethod    
     def goalCallback(goal_msg,controller):
         if goal_msg.pose.position != controller.planner.goal:
-            controller.planner.set_goal(goal_msg.pose.position.x,goal_msg.pose.position.y,0)
+            controller.planner.setGoal(goal_msg.pose.position.x,goal_msg.pose.position.y,0)
             controller.planner.plan()
-            controller.pointer = 0
-            controller.goal = controller.planner.path.poses[controller.pointer]
+            if len(controller.planner.path.poses) == 0:
+                rospy.loginfo("simple_controller:No path found")
+            else:
+                rospy.loginfo("simple_controller:Path found")
+                controller.pointer = 0
+                controller.goal = controller.planner.path.poses[controller.pointer]
 
     def getTheMap(self,mapService='/static_map'):
         #wait for map service
@@ -179,6 +241,7 @@ class SimpleController:
         return twist
 
     def loop(self):
+        rospy.loginfo("simple_controller:goal is " + str(self.planner.path.poses))
         odom_msg = self.getOdomMsg()
         if self.goal is not None :
             #heading ang goal angles
@@ -197,12 +260,16 @@ class SimpleController:
             #calculate twist
             twist = self.calculateTwist(angleCtrl, distanceCtrl)
             #publish twist
+            rospy.loginfo(f"simple_controller:Publishing twist {twist}")
             self.cmdPublisher.publish(twist)
             #publish path
-            self.pathPublisher.publish(self.planner.path)
+            rospy.loginfo(f"simple_controller:Publishing path with {len(self.planner.path.poses)} poses")
+            if len(self.planner.path.poses) > 0:
+                self.pathPublisher.publish(self.planner.path)
             if self.is_reached(odom_msg, self.goal):
                 self.pointer += 1
                 if self.pointer < len(self.planner.path.poses):
+                    rospy.loginfo("simple_controller:Reached goal, setting new goal")
                     self.goal = self.planner.path.poses[self.pointer]
                 else:
                     self.goal = None
@@ -245,7 +312,7 @@ if __name__ == '__main__':
         raise rospy.ROSInterruptException("Invalid arguments : goal_topic")
 
     #initialize node
-    controller = SimpleController(odom_topic,cmd_topic,goal_topic,path_topic,Planner)
+    controller = SimpleController(odom_topic,cmd_topic,goal_topic,path_topic,"AStar")
     while not rospy.is_shutdown():
         #get current position
         controller.loop()

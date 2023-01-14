@@ -8,6 +8,7 @@ import numpy as np
 import pygame
 from cv2 import resize,imread
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5
 ROBOT_SIZE_UGV = 0.5
@@ -21,6 +22,8 @@ IMG_UAV = "/home/gemy/catkin_ws/src/multirobot_sim/resources/uav-icon.png"
 #default goals topics
 UGV_GOAL_TOPIC = "/goal"
 UAV_GOAL_TOPIC = "/command/pose"
+UGV_PATH_TOPIC = "/path"
+UAV_PATH_TOPIC = "/command/trajectory"
 
 class PyMonitor:
   def __init__(self):
@@ -53,7 +56,14 @@ class PyMonitor:
     #initialize turtles
     rospy.loginfo("PyMonitor: Initializing Robots ")
     self.surfaces = self.initializeSurfaces(self.robots,self.scale,map_meta.resolution)
-
+    #subscribe to robot path topic
+    for surface in self.surfaces:
+        if surface['type'] == 'uav':
+            rospy.Subscriber(f"{surface['name']}/{UAV_PATH_TOPIC}", Path, self.pathCallback,(self,surface))
+        elif surface['type'] == 'ugv':
+            rospy.Subscriber(f"{surface['name']}/{UGV_PATH_TOPIC}", Path, self.pathCallback,(self,surface))
+        else:
+            raise ValueError("Invalid robot type")
     rospy.loginfo("PyMonitor: Robots initialized")
     #subscribe to robot position topic
     rospy.loginfo("PyMonitor: Subscribing to robot position topic")
@@ -63,6 +73,19 @@ class PyMonitor:
     rospy.loginfo("PyMonitor: Spinning")
     self.activeIndex = None
 
+  @staticmethod
+  def pathCallback(msg,args):
+    self = args[0]
+    surface = args[1]
+    #get surface index
+    index = self.surfaces.index(surface)
+    #get path
+    path = msg.poses
+    #get path points
+    points = [pose.pose.position for pose in path]
+    #update surface path
+    self.surfaces[index]['path'] = points
+  
   def getParameters(self):
     #getting arguments
     try :
@@ -200,6 +223,7 @@ class PyMonitor:
         r["goal"] = (r["goal"][0],r["goal"][1],ELEVATION if r["type"]=="uav" else 0)
       r["pos"] = None
       r["loc"]= None
+      r["path"] = None
       surfaces.append(r)
     return surfaces
   
@@ -236,6 +260,14 @@ class PyMonitor:
       return None
     return robot["goal"]
 
+  def displayPath(self,surface):
+    if surface["path"] is not None and len(surface["path"])>0 and surface["goal"] is not None:
+      for pose in surface["path"]:
+        x = pose.x
+        y = pose.y
+        point = self.worldToPixel(x,y,self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
+        pygame.draw.circle(self.screen, (0,255,0), point, 3)
+
   def rendreGoal(self,robot):
     if robot["goal"] is not None:
       goalLoc = robot['goal'][0],robot['goal'][1]
@@ -258,6 +290,8 @@ class PyMonitor:
         t["goal"] = self.watchForGoal(t)  
         #rendre goal
         self.rendreGoal(t)
+        #rendre path
+        self.displayPath(t)
         #rendre robot
         self.rendreRobot(t)
       except rospy.ServiceException as e:
