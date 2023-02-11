@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import rospy
 import numpy as np
-from math import sqrt, atan2,pi
+from math import sqrt, atan2,pi,copysign
 from nav_msgs.srv import GetMap
 from nav_msgs.msg import Odometry,Path,OccupancyGrid
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped,Point,Pose
 from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion
 from path_planning import AStar,RTT
@@ -324,11 +324,14 @@ class SimpleController:
         return self.getHeading(p1,p2)
         
     def getDistance(self,odom_msg,goal):
-        if type(goal) is PoseStamped:
-            p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
+        p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
+        if isinstance(goal,PoseStamped):
             p2 = (goal.pose.position.x,goal.pose.position.y)
-        elif type(goal) is tuple or type(goal) is list:
-            p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
+        elif isinstance(goal,Pose):
+            p2 = (goal.position.x,goal.position.y)
+        elif isinstance(goal,Point):
+            p2 = (goal.x,goal.y)
+        else:
             p2 = (goal[0],goal[1])
         return sqrt((p1[0] - p2[0] )**2 +(p1[1] - p2[1] )**2)
     
@@ -346,7 +349,7 @@ class SimpleController:
     def calculateTwist(self,angleCtl, distanceCtl):
         twist = Twist()
         twist.linear.x = min(abs(distanceCtl), MAX_LINEAR_SPEED)
-        twist.angular.z = np.sign(min(abs(angleCtl), MAX_ANGULAR_SPEED),angleCtl)
+        twist.angular.z = copysign(min(abs(angleCtl), MAX_ANGULAR_SPEED),angleCtl)
         return twist
     
     def updatePosition(self,odom_msg):
@@ -395,7 +398,7 @@ class SimpleController:
             #publish path
             if len(self.planner.path.poses) > 0:
                 self.pathPublisher.publish(self.planner.path)
-            if self.is_reached(odom_msg, self.targer):
+            if self.is_reached(odom_msg, self.target):
                 rospy.loginfo("simple_controller:Reached goal, setting new goal")                 
                 self.goal = None
                 self.target = None
