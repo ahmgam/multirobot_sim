@@ -278,7 +278,13 @@ class PyMonitor:
     if robot["loc"] is not None:
       self.screen.blit(robot["surface"],(robot["pos"][0],robot["pos"][1]))
 
+  def renderOrigin(self):
+    goal = self.worldToPixel(self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
+    pygame.draw.circle(self.screen, (0,255,255), goal, 5)
+
   def updateScreen(self):
+    #render origin
+    self.renderOrigin()
     #update robots coordinates
     for t in self.surfaces:
       try:

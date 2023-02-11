@@ -425,17 +425,13 @@ class AStar:
 
     def plan(self):
         #flash the lists
-        loginfo("Flashing lists")
         self.flash()
         # Add the start node
-        loginfo("Adding start node")
         self.open.append(self.start)
         # Loop until you find the end
-        loginfo(f"Looping until goal is found, open list length: {len(self.open)}")
         while len(self.open) > 0:
             
             # Get the current node
-            loginfo(f"Getting current node, open list length: {len(self.open)}")
             self.current = self.open[0]
             current_index = 0
             for index, item in enumerate(self.open):
@@ -444,7 +440,6 @@ class AStar:
                     current_index = index
 
             # Pop current off open list, add to closed list
-            loginfo(f"Removing current node from open list, adding to closed list")
             self.open.pop(current_index)
             self.closed.append(self.current)
             ref = self.closed.index(self.current)
@@ -477,7 +472,6 @@ class AStar:
                 children.append(new_node)
 
             # Loop through children
-            loginfo(f"Looping through children, children length: {len(children)}")
             for child in children:
                 # Child is on the closed list
                 if child in self.closed:
