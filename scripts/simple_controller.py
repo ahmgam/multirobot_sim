@@ -14,11 +14,11 @@ WHEEL_DIAMETER = 0.066
 TOLERANCE= 0.2
 MAX_LINEAR_SPEED = 0.5
 MAX_ANGULAR_SPEED = 1.0
-DISTANCE_THESHOLD = 1.0
-ANGLE_THEHOLD = 0.2
-
+DISTANCE_THRESHOLD = 1.0
+ANGLE_THREHOLD = 0.2
+LOOKAHEAD_DIST = 1.0
 class Tracker :
-    def __init__(self,lookAheadDis=0.5):
+    def __init__(self,lookAheadDis=LOOKAHEAD_DIST):
         self.path = Path()
         self.lastFoundIndex = 0
         self.goal = None
@@ -38,13 +38,18 @@ class Tracker :
 
     def update(self,currentPos):
         # extract currentX and currentY
+        
         currentX = currentPos[0]
         currentY = currentPos[1]
 
         # use for loop to search intersections
         intersectFound = False
         startingIndex = self.lastFoundIndex
-
+        rospy.loginfo(f"Updating tracker point : {startingIndex!= len(self.path.poses)-1}")
+        if self.lastFoundIndex == len(self.path.poses)-2:
+            rospy.loginfo("Last point reached")
+            startingIndex = len(self.path.poses)-1
+            self.goal = self.path.poses[-1].pose.position.x,self.path.poses[-1].pose.position.y
         for i in range (startingIndex, len(self.path.poses)-1):
 
             # beginning of line-circle intersection code
@@ -57,7 +62,7 @@ class Tracker :
             dr = sqrt (dx**2 + dy**2)
             D = x1*y2 - x2*y1
             discriminant = (self.lookAheadDis**2) * (dr**2) - D**2
-
+            rospy.loginfo("discriminant: %f" % discriminant)
             if discriminant >= 0:
                 sol_x1 = (D * dy + np.sign(dy) * dx * np.sqrt(discriminant)) / dr**2
                 sol_x2 = (D * dy - np.sign(dy) * dx * np.sqrt(discriminant)) / dr**2
@@ -75,34 +80,40 @@ class Tracker :
 
                 # if one or both of the solutions are in range
                 if ((minX <= sol_pt1[0] <= maxX) and (minY <= sol_pt1[1] <= maxY)) or ((minX <= sol_pt2[0] <= maxX) and (minY <= sol_pt2[1] <= maxY)):
-
+                    rospy.loginfo("Found intersection at index %d" % i)
                     foundIntersection = True
                     nextPoint= [self.path.poses[i+1].pose.position.x,self.path.poses[i+1].pose.position.y]
+                    lastPoint = [self.path.poses[i].pose.position.x,self.path.poses[i].pose.position.y]
                     # if both solutions are in range, check which one is better
                     if ((minX <= sol_pt1[0] <= maxX) and (minY <= sol_pt1[1] <= maxY)) and ((minX <= sol_pt2[0] <= maxX) and (minY <= sol_pt2[1] <= maxY)):
                         # make the decision by compare the distance between the intersections and the next point in path
-                        
-                        if self.getDistance(sol_pt1, nextPoint) < self.getDistance(sol_pt2, nextPoint):
-                            self.goal = sol_pt1
-                        else:
-                            self.goal = sol_pt2
+                        #get compare point as an average of two solutions
+                        midPoint = [(sol_pt1[0]+sol_pt2[0])/2,(sol_pt1[1]+sol_pt2[1])/2]
+                        if self.getDistance(lastPoint,midPoint) <= self.getDistance(midPoint,nextPoint):
+                            self.goal = lastPoint
+                            self.lastFoundIndex = i
+                        else : 
+                            self.goal = nextPoint
+                            self.lastFoundIndex = i+1
                         break
                     # if not both solutions are in range, take the one that's in range
                     else:
                         # if solution pt1 is in range, set that as goal point
                         if (minX <= sol_pt1[0] <= maxX) and (minY <= sol_pt1[1] <= maxY):
-                            self.goal = sol_pt1
+                            if self.getDistance (sol_pt1, nextPoint) < self.getDistance (sol_pt1, lastPoint):
+                                self.goal = nextPoint
+                                self.lastFoundIndex = i+1
+                            else:
+                                self.goal = lastPoint
+                                self.lastFoundIndex = i
                         else:
-                            self.goal = sol_pt2
-                    
-                    # only exit loop if the solution pt found is closer to the next pt in path than the current pos
-                    if self.getDistance (self.goal, nextPoint) < self.getDistance ([currentX, currentY], nextPoint):
-                        # update self.lastFoundIndex and exit
-                        self.lastFoundIndex = i
+                            if self.getDistance (sol_pt2, nextPoint) < self.getDistance (sol_pt2, lastPoint):
+                                self.goal = nextPoint
+                                self.lastFoundIndex = i+1
+                            else:
+                                self.goal = lastPoint
+                                self.lastFoundIndex = i
                         break
-                    else:
-                        # in case for some reason the robot cannot find intersection in the next path segment, but we also don't want it to go backward
-                        self.lastFoundIndex = i+1
                     
                 # if no solutions are in range
                 else:
@@ -290,7 +301,10 @@ class SimpleController:
             else:
                 rospy.loginfo("simple_controller:Path found")
                 controller.tracker.setPath(controller.planner.path)
-                controller.goal = controller.planner.path.poses[0].pose.position
+                controller.goal = [
+                    controller.planner.path.poses[0].pose.position.x,
+                    controller.planner.path.poses[0].pose.position.y
+                    ]
 
     def getTheMap(self,mapService='/static_map'):
         #wait for map service
@@ -311,16 +325,23 @@ class SimpleController:
             odom_msg.pose.pose.orientation.z,
             odom_msg.pose.pose.orientation.w
             ))
+        
         return yaw
 
     def getGoalHeading(self,odom_msg,goal):
+        p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
+        #if type(goal) is PoseStamped:
+        #    p2 = (goal.pose.position.x,goal.pose.position.y)
+        #elif type(goal) is tuple or type(goal) is list:
+        #    p2 = (goal[0],goal[1])
+        #else :
+            #raise TypeError(f"simple_controller:Goal type not supported {type(goal)}")
+        #    p2 = (goal[0],goal[1])
         
-        if type(goal) is PoseStamped:
-            p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
-            p2 = (goal.pose.position.x,goal.pose.position.y)
-        elif type(goal) is tuple or type(goal) is list:
-            p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
+        try : 
             p2 = (goal[0],goal[1])
+        except Exception as e:
+            p2 = (goal.pose.position.x,goal.pose.position.y) 
         return self.getHeading(p1,p2)
         
     def getDistance(self,odom_msg,goal):
@@ -358,12 +379,15 @@ class SimpleController:
     @staticmethod
     def getHeading(p1,p2):
         #return atan2(p2[1] - p1[1],p2[0] - p1[0])
+    
         angle= atan2(p2[1] - p1[1],p2[0] - p1[0])
         if angle > pi:
             angle = angle - 2*pi
         elif angle < -pi:
             angle = angle + 2*pi
         return angle
+        
+        
 
     def loop(self):
         odom_msg = self.getOdomMsg()
@@ -380,6 +404,8 @@ class SimpleController:
             #difference_angle = goal_angle-heading_angle 
             rospy.loginfo("difference_angle: "+str(difference_angle))
             rospy.loginfo("goal : "+str(self.goal[0])+","+str(self.goal[1]))
+            rospy.loginfo("target : "+str(self.target.x)+","+str(self.target.y))
+            rospy.loginfo("position : "+str(self.position[0])+","+str(self.position[1]))
             #get distance to goal
             distance = self.getDistance(odom_msg,self.goal)
             #update controllers
@@ -389,8 +415,10 @@ class SimpleController:
             angleCtrl =self.headingController.calculate()
             distanceCtrl = self.distanceController.calculate()
             #condition for unreachable 
-            if ANGLE_THEHOLD < difference_angle:
+            
+            if ANGLE_THREHOLD < difference_angle and distance < DISTANCE_THRESHOLD:
                 distanceCtrl = 0
+            
             #calculate twist
             twist = self.calculateTwist(angleCtrl, distanceCtrl)
             #publish twist
