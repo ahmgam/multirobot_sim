@@ -394,6 +394,10 @@ class PRM:
 
         return 
 
+
+######################################
+# TODO : the path is two ways, dont forget to fix it
+######################################
 class AStar:
     def __init__(self, occupGrid,gridInfo, window=1):
         self.window = window
