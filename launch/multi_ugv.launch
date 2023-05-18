@@ -1,8 +1,8 @@
 <launch>
   <!-- Arguments -->
   <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="map_file" default="/home/gemy/catkin_ws/src/multirobot_sim/maps/map.yaml"/>
-  <arg name="world_file" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
+  <arg name="map_file" default="/home/gemy/robot_ws/src/multirobot_sim/maps/map.yaml"/>
+  <arg name="world_file" value="/home/gemy/robot_ws/src/multirobot_sim/worlds/testworld.world"/>
   <arg name="ugv_name_1" default="ugv1"/>
   <arg name="ugv_name_2" default="ugv2"/>
   <arg name="ugv_name_3" default="ugv3"/>
@@ -19,19 +19,19 @@
     <arg name="debug" value="false"/>
   </include>
   <!-- Spawn the robot 1-->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg ugv_name_1)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg ugv_x_1)"/>
   </include>
   <!-- Spawn the robot 2-->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg ugv_name_2)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg ugv_x_2)"/>
   </include>
   <!-- Spawn the robot 3-->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg ugv_name_3)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg ugv_x_3)"/>

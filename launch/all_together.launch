@@ -1,8 +1,8 @@
 <launch>
   <!--Arguments-->
   <arg name="mav_name" default="firefly"/>
-  <arg name="world_file" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
-  <arg name="map_file" default="/home/gemy/catkin_ws/src/multirobot_sim/maps/map.yaml"/>
+  <arg name="world_file" value="/home/gemy/robot_ws/src/multirobot_sim/worlds/testworld.world"/>
+  <arg name="map_file" default="/home/gemy/robot_ws/src/multirobot_sim/maps/map.yaml"/>
   <arg name="enable_logging" default="false" />
   <arg name="enable_ground_truth" default="true" />
   <arg name="log_file" default="$(arg mav_name)" />
@@ -57,19 +57,19 @@
     <arg name="z" value="$(arg elevation)"/>
   </include>
    <!-- Spawn the ugv 1-->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg ugv_name_1)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg ugv_x_1)"/>
   </include>
   <!-- Spawn the ugv 2-->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg ugv_name_2)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg ugv_x_2)"/>
   </include>
   <!-- Spawn the ugv 3-->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg ugv_name_3)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg ugv_x_3)"/>

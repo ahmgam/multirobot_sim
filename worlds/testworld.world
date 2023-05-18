@@ -93,7 +93,7 @@
               <heading_deg>0</heading_deg>
             </spherical_coordinates>
       
-        <model name='box_tgfco'>
+        <model name='box_chswu'>
               <pose>0 -10 0 0.0 0.0 0.0</pose>
               <link name='link'>
                 <inertial>
@@ -148,7 +148,7 @@
                 <static>1</static>
             </model>
         
-        <model name='box_aaaai'>
+        <model name='box_rscxr'>
               <pose>0 10 0 0.0 0.0 0.0</pose>
               <link name='link'>
                 <inertial>
@@ -203,7 +203,7 @@
                 <static>1</static>
             </model>
         
-        <model name='box_kulii'>
+        <model name='box_zhjbv'>
               <pose>10 0 0 0.0 0.0 1.5707963267948966</pose>
               <link name='link'>
                 <inertial>
@@ -258,7 +258,7 @@
                 <static>1</static>
             </model>
         
-        <model name='box_vmkcj'>
+        <model name='box_ufupz'>
               <pose>-10 0 0 0.0 0.0 1.5707963267948966</pose>
               <link name='link'>
                 <inertial>
@@ -331,7 +331,7 @@
         </link>
       </model>
       
-      <model name='box_tgfco'>
+      <model name='box_chswu'>
         <pose>0 -10 0 0.0 0.0 0.0</pose>
         <scale>20 1 10</scale>
         <link name='link'>
@@ -342,7 +342,7 @@
         </link>
       </model>
       
-      <model name='box_aaaai'>
+      <model name='box_rscxr'>
         <pose>0 10 0 0.0 0.0 0.0</pose>
         <scale>20 1 10</scale>
         <link name='link'>
@@ -353,7 +353,7 @@
         </link>
       </model>
       
-      <model name='box_kulii'>
+      <model name='box_zhjbv'>
         <pose>10 0 0 0.0 0.0 1.5707963267948966</pose>
         <scale>21 1 10</scale>
         <link name='link'>
@@ -364,7 +364,7 @@
         </link>
       </model>
       
-      <model name='box_vmkcj'>
+      <model name='box_ufupz'>
         <pose>-10 0 0 0.0 0.0 1.5707963267948966</pose>
         <scale>21 1 10</scale>
         <link name='link'>

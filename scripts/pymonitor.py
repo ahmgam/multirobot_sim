@@ -17,8 +17,8 @@ MIN_FIG_SIZE = 30
 TOLERANCE=0.2
 ELEVATION=2
 #imges locations
-IMG_UGV = "/home/gemy/catkin_ws/src/multirobot_sim/resources/ugv-icon.png"
-IMG_UAV = "/home/gemy/catkin_ws/src/multirobot_sim/resources/uav-icon.png"
+IMG_UGV = "/home/gemy/robot_ws/src/multirobot_sim/resources/ugv-icon.png"
+IMG_UAV = "/home/gemy/robot_ws/src/multirobot_sim/resources/uav-icon.png"
 #default goals topics
 UGV_GOAL_TOPIC = "/goal"
 UAV_GOAL_TOPIC = "/command/pose"

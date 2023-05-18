@@ -2,7 +2,7 @@
   <!-- Arguments -->
   <arg name="robot_name" default="ugv"/>
   <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="map_file" default="/home/gemy/catkin_ws/src/multirobot_sim/maps/map.yaml"/>
+  <arg name="map_file" default="/home/gemy/robot_ws/src/multirobot_sim/maps/map.yaml"/>
   <arg name="open_rviz" default="true"/>
   <arg name="move_forward_only" default="false"/>
   <arg name="multi_robot_name" default=""/>
@@ -11,7 +11,7 @@
   <arg name="z_pos" default="0.0"/>
   <!-- Load the world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="/home/gemy/catkin_ws/src/multirobot_sim/worlds/testworld.world"/>
+    <arg name="world_name" value="/home/gemy/robot_ws/src/multirobot_sim/worlds/testworld.world"/>
     <arg name="paused" value="false"/>
     <arg name="use_sim_time" value="true"/>
     <arg name="gui" value="true"/>
@@ -19,7 +19,7 @@
     <arg name="debug" value="false"/>
   </include>
   <!-- Spawn the robot -->
-  <include file="/home/gemy/catkin_ws/src/multirobot_sim/launch/ugv.launch">
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
     <arg name="robot_name" value="$(arg robot_name)"/>
     <arg name="model" value="$(arg model)"/>
     <arg name="x" value="$(arg x_pos)"/>
