@@ -396,10 +396,10 @@ class PRM:
 
 
 ######################################
-# TODO : the path is two ways, dont forget to fix it
+# A* algorithm
 ######################################
 class AStar:
-    def __init__(self, occupGrid,gridInfo, window=1):
+    def __init__(self, occupGrid,gridInfo, window=1,simplify=True):
         self.window = window
         self.info = gridInfo
         self.grid = occupGrid
@@ -409,6 +409,7 @@ class AStar:
         self.closed = []
         self.path = []
         self.current = None
+        self.simple = simplify
 
     def setStart(self, start):
         loginfo("Setting start to: " + str(start))
@@ -453,7 +454,10 @@ class AStar:
                 while current.parent is not None:
                     self.path.append(current.position)
                     current = self.closed[current.parent]
-                    self.path = self.path[::-1]
+                self.path = self.path[::-1]
+                # simply path
+                if self.simple:
+                    self.path = rdp_simplify(self.path, 0.5)
                 return 
 
             # Generate children
@@ -491,6 +495,7 @@ class AStar:
                     continue
                 # Add the child to the open list
                 self.open.append(child)
+        
                 
 
 class RTT: 
@@ -558,6 +563,9 @@ class RTT:
             self.path.append(self.verts[self.verts.index(q_curr) - 1])
             # make a plot and show RRT
             q_curr = self.path[-1]
+
+        # simplify path
+        self.path = rdp_simplify(self.path)
         print("Done")
 
     def no_collision(self,x0, y0, x1, y1, world):
@@ -684,8 +692,66 @@ class RTT:
             q_new_y = q_near[1] + v_unit[1]*inc_dist
             return [int(round(q_new_x)), int(round(q_new_y))]
 
+###########################################
+# RDP Algorithm for Path Simplification
+###########################################
+def rdp_simplify(points, epsilon):
+    # Check if the list is long enough to simplify
+    if len(points) < 3:
+        return points
+    
+    # Find the point with the maximum distance
+    dmax = 0
+    index = 0
+    end = len(points) - 1
+    
+    for i in range(1, end):
+        d = perpendicular_distance(points[i], points[0], points[end])
+        if d > dmax:
+            index = i
+            dmax = d
+    
+    # Check if the maximum distance is greater than epsilon
+    simplified = []
+    
+    if dmax > epsilon:
+        # Recursive call to simplify each half
+        rec_results1 = rdp_simplify(points[:index + 1], epsilon)
+        rec_results2 = rdp_simplify(points[index:], epsilon)
+        
+        # Build the simplified list
+        simplified.extend(rec_results1[:-1])
+        simplified.extend(rec_results2)
+    else:
+        # The maximum distance is below epsilon
+        simplified = [points[0], points[end]]
+    
+    return simplified
+
+def perpendicular_distance(point, start, end):
+    # Calculate the perpendicular distance between a point and a line segment
+    x1, y1 = start
+    x2, y2 = end
+    x, y = point
+    # Calculate the slope of the line segment
+    if x2 == x1:
+        slope = math.inf
+    else:
+        slope = (y2 - y1) / (x2 - x1)
+    
+    # Calculate the y-intercept of the line segment
+    y_intercept = y1 - slope * x1
+    
+    # Calculate the perpendicular distance
+    distance = abs(slope * x - y + y_intercept) / math.sqrt(slope ** 2 + 1)
+    
+    return distance
 
 if __name__ == '__main__':
+
+
+
+
 
     # start and goal position
     sx = 10.0  # [m]
@@ -729,9 +795,24 @@ if __name__ == '__main__':
         "width": 61,
         "height": 61,
     }
-    astar = AStar(grid, gridInfo)
+    astar = AStar(grid, gridInfo,simplify=True)
     astar.setStart(start)
     astar.setGoal(goal)
     astar.plan()
+    #print start and goal
+    print(f"start: {start}, goal: {goal}")
     print(astar.path)
+    #convert path to numpy array
+    path = np.array(astar.path)
+    #print grid in matplotlib plot
+    plt.imshow(grid, cmap='Greys', origin='lower')
+    plt.plot(start[0], start[1], 'ro')
+    plt.plot(goal[0], goal[1], 'ro')
+    plt.plot(path[:,0], path[:,1], 'r-')
+    plt.show()
+
+
+
+
+   
 
