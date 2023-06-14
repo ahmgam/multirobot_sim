@@ -34,6 +34,12 @@
             <param name="y" value="$(arg y)"/>
             <param name="z" value="$(arg z)"/>
         </node>
+        <!-- Repeater node-->
+        <node name="repeater" pkg="multirobot_sim" type="repeater.py" output="screen">
+            <param name="robot_name" value="$(arg robot_name)"/>
+            <param name="source_topic" value="goal"/>
+            <param name="target_topic" value="command/goal"/>
+        </node>
         <!-- robot state publisher-->
         <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
         <!-- joint state publisher-->

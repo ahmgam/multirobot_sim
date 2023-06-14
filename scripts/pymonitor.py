@@ -21,7 +21,8 @@ IMG_UGV = "/home/gemy/robot_ws/src/multirobot_sim/resources/ugv-icon.png"
 IMG_UAV = "/home/gemy/robot_ws/src/multirobot_sim/resources/uav-icon.png"
 #default goals topics
 UGV_GOAL_TOPIC = "/goal"
-UAV_GOAL_TOPIC = "/command/pose"
+UAV_GOAL_TOPIC = "/goal"
+#UAV_GOAL_TOPIC = "/command/pose"
 UGV_PATH_TOPIC = "/path"
 UAV_PATH_TOPIC = "/command/trajectory"
 
@@ -291,7 +292,7 @@ class PyMonitor:
         #update robot coordinates
         t["loc"],t["pos"] = self.updateRobotCoordinates(t)
         #prodcasting goal to robot is exist
-        self.publishGoal(t)
+        #self.publishGoal(t)
         #check goal status
         t["goal"] = self.watchForGoal(t)  
         #rendre goal
@@ -323,6 +324,8 @@ class PyMonitor:
             pos = self.pixelToWorld(event.pos[0],event.pos[1],self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
             pos = (pos[0],pos[1],0 if self.surfaces[self.activeIndex]["type"] == "ugv" else ELEVATION)
             self.surfaces[self.activeIndex]["goal"] = pos
+            #prodcast goal
+            self.publishGoal(self.surfaces[self.activeIndex])
         if event.button == 3:
           self.activeIndex = None
         if event.button ==2:
