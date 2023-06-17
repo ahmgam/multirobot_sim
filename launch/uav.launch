@@ -36,7 +36,7 @@
         </node>
         <!-- Repeater node-->
         <node name="repeater" pkg="multirobot_sim" type="repeater.py" output="screen">
-            <param name="robot_name" value="$(arg robot_name)"/>
+            <param name="model_name" value="$(arg robot_name)"/>
             <param name="source_topic" value="goal"/>
             <param name="target_topic" value="command/pose"/>
             <param name="path_topic" value="path"/>

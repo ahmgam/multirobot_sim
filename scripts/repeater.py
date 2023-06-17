@@ -22,6 +22,7 @@ class Repeater:
             self.pathPublisher = rospy.Publisher(self.path_topic, Path, queue_size=10)
             rospy.loginfo(f"{model_name}_repeater:path publisher initialized")
             self.service_proxy = rospy.ServiceProxy('/gazebo/get_model_state', GetModelState)
+            self.service_proxy.wait_for_service()
             rospy.loginfo(f"{model_name}_repeater:service proxy initialized")
             rospy.Subscriber(source_topic, PoseStamped, self.callback,self)
             rospy.loginfo(f"{model_name}_repeater:source topic subscriber initialized")
@@ -37,7 +38,7 @@ class Repeater:
         self.pose = self.service_proxy(self.model_name, 'world').pose
 
     def InTolerance(self,goal_pose, tolerance):
-        return (abs(goal_pose.position.x - self.pose.position.x) < tolerance) and (abs(goal_pose.position.y - self.pose.position.y) < tolerance)
+        return (abs(goal_pose.pose.position.x - self.pose.position.x) < tolerance) and (abs(goal_pose.pose.position.y - self.pose.position.y) < tolerance)
     
     def IsGoalReached(self,goal_pose, tolerance):
         if self.InTolerance(goal_pose, tolerance):
@@ -66,7 +67,7 @@ class Repeater:
         
     def publish(self):
         if self.goalPose is not None:
-            self.publisher.publish(self.message)
+            self.publisher.publish(self.goalPose)
 
     def publishPath(self):
         path = self.getTwoPointPath(self.goalPose.position.x,self.goalPose.position.y,self.goalPose.position.z)
@@ -76,8 +77,9 @@ class Repeater:
         # update robot pose
         self.updatePose()
         # check if goal is reached
-        if self.IsGoalReached(self.goalPose, self.tolerance):
-            self.goalPose = None
+        if self.goalPose != None:
+            if self.IsGoalReached(self.goalPose, self.tolerance):
+                self.goalPose = None
         # publish the message
         self.publish()
         # sleep
@@ -90,7 +92,7 @@ if __name__ == '__main__':
     ns = rospy.get_namespace()
 
     try :
-        model_name= rospy.get_param(f'{ns}/repeater/model_name') # node_name/argsname
+        model_name= rospy.get_param(f'{ns}repeater/model_name') # node_name/argsname
         rospy.loginfo(f"{ns}_repeater:Getting model_name argument, and got : ", model_name)
 
     except rospy.ROSInterruptException:
