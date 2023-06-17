@@ -23,8 +23,8 @@ IMG_UAV = "/home/gemy/robot_ws/src/multirobot_sim/resources/uav-icon.png"
 UGV_GOAL_TOPIC = "/goal"
 UAV_GOAL_TOPIC = "/goal"
 #UAV_GOAL_TOPIC = "/command/pose"
-UGV_PATH_TOPIC = "/path"
-UAV_PATH_TOPIC = "/command/trajectory"
+UGV_PATH_TOPIC = "path"
+UAV_PATH_TOPIC = "path"
 
 class PyMonitor:
   def __init__(self):
