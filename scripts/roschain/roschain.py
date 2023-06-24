@@ -15,7 +15,7 @@ from time import sleep
 from random import randint
 import rospy
 from gazebo_msgs.srv import GetModelState
-from multirobot_sim.srv import GetNewRecords,SubmitMessage
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction
 
 class RosChain:
     def __init__(self,node_id,node_type,endpoint,port,secret_key,auth=None,DEBUG=False):

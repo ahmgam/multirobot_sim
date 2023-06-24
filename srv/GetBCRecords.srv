@@ -1,0 +1,3 @@
+int64 last_trans_id
+---
+string[] transactions
