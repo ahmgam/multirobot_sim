@@ -9,7 +9,7 @@
     <arg name="secret"/>
 
   <!--Robot namespace-->
-    <group ns="$(arg robot_name)">
+    <group ns="$(arg node_id)">
         <!-- Load the controller -->
         <node pkg="multirobot_sim" type="roschain.py" name="roschain" output="screen" required="true">
         <param name="node_id" value="$(arg node_id)"/>

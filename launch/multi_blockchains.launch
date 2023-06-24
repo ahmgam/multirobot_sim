@@ -27,5 +27,4 @@
     <arg name="rabbitmq_port" value="$(arg rabbitmq_endpoint)"/>
     <arg name="secret" value="$(arg rabbitmq_endpoint)"/>
   </include>
-  </node>
 </launch>
