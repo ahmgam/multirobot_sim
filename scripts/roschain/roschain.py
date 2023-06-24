@@ -1,21 +1,16 @@
 from network import NetworkInterface
 from connector import RabbitMQCommunicationModule
 from session import SessionManager
-from flask import Flask, request
 from encryption import EncryptionModule
 from queues import QueueManager
 from heartbeat import HeartbeatProtocol
 from discovery import DiscoveryProtocol
-from threading import Thread
 from messages import *
 from consensus import SBFT
 from blockchain import Blockchain
-import sys
-from time import sleep
-from random import randint
 import rospy
 from gazebo_msgs.srv import GetModelState
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction
+#from multirobot_sim.srv import GetBCRecords,SubmitTransaction
 
 class RosChain:
     def __init__(self,node_id,node_type,endpoint,port,secret_key,auth=None,DEBUG=False):
@@ -72,9 +67,9 @@ class RosChain:
         self.cron_procedures.append(self.consensus.cron)
         self.cron_procedures.append(self.blockchain.cron)
         #define records service
-        self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetNewRecords,lambda req: self.get_records(self,req))
+        #self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetNewRecords,lambda req: self.get_records(self,req))
         #define submit message service
-        self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitMessage,lambda req: self.submit_message(self,req))
+        #self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitMessage,lambda req: self.submit_message(self,req))
         #define ros node
         self.node = rospy.init_node("roschain", anonymous=True)
            

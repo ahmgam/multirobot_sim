@@ -4,8 +4,7 @@ from cryptography.fernet import Fernet
 from base64 import  b64encode, b64decode
 import json
 from math import ceil
-import time
-
+from rospy import loginfo
 class EncryptionModule:
     
     @staticmethod
@@ -132,7 +131,7 @@ class EncryptionModule:
                 result.append(rsa.decrypt(message[start_index:end_index], sk).decode("ascii"))   
             return ''.join(result)
         except Exception as e:
-            rospy.loginfo(f"error decrypting message: {e}")
+            loginfo(f"error decrypting message: {e}")
             return None
     
     @staticmethod

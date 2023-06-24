@@ -1,10 +1,10 @@
 <launch>
   <!--Arguments-->
-    <arg name="rabbitmq_endpoint" default="127.0.0.1"/>
+    <arg name="rabbitmq_endpoint" default="localhost"/>
     <arg name="rabbitmq_username" default="admin"/>
     <arg name="rabbitmq_password" default="passw123"/>
     <arg name="rabbitmq_port" default="5672"/>
-    <arg name="secret" default=""/>
+    <arg name="secret" default="abc123"/>
   <!-- Load the world -->
 
   <!-- Spawn robot 1-->
@@ -12,19 +12,19 @@
     <arg name="node_id" value="node1"/>
     <arg name="node_type" value="uav"/>
     <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_username" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_password" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_port" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="secret" value="$(arg rabbitmq_endpoint)"/>
+    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
+    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+    <arg name="secret" value="$(arg secret)"/>
   </include>
   <!-- Spawn robot 2-->
   <include file="$(find multirobot_sim)/launch/blockchain.launch">
     <arg name="node_id" value="node2"/>
     <arg name="node_type" value="ugv"/>
     <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_username" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_password" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_port" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="secret" value="$(arg rabbitmq_endpoint)"/>
+    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
+    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+    <arg name="secret" value="$(arg secret)"/>
   </include>
 </launch>

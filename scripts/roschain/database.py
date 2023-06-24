@@ -1,5 +1,6 @@
 import sqlite3
 import random
+import rospy
 class Database (object):
     def __init__(self, path, schema=None):
         self.connection = sqlite3.connect(path, check_same_thread=False)
