@@ -17,6 +17,8 @@ from time import mktime
 from random import choices
 from string import digits, ascii_uppercase,ascii_lowercase
 from gazebo_msgs.srv import GetModelState
+from paho.mqtt import client as mqtt_client
+
 #from multirobot_sim.srv import GetBCRecords,SubmitTransaction
 
 #################################
@@ -210,12 +212,60 @@ class RabbitMQCommunicationModule:
         except pika.exceptions.AMQPConnectionError as e:
             rospy.loginfo(f"Error sending message: {e}")
             return False
-        
-
-    
+            
     def get(self):
         _, _, body = self.channel.basic_get(queue=self.node_id, auto_ack=True)
         return body
+        
+    def is_available(self):
+        return not self.buffer.empty()
+
+class MQTTCommunicationModule:
+    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
+        self.node_id = node_id
+        self.endpoint = endpoint
+        self.port = port
+        self.auth = auth
+        self.DEBUG = DEBUG
+        self.base_topic = "nodes"
+        self.buffer = Queue()
+        self.__init_mqtt()
+        self.counter = 0
+        self.timeout = 5
+
+    def __init_mqtt(self):
+        self.client = mqtt_client.Client(self.node_id)
+        if self.auth == None:
+            self.client.username_pw_set(self.auth["username"],self.auth["password"])
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
+        self.client.connect(self.endpoint, self.port)
+
+    def on_message(self, client, userdata, message):
+        self.buffer.put(message)
+
+    def on_connect(self, client, userdata, flags, rc):
+        print(f"{self.node_id}: Connected with result code " + str(rc))
+        
+    def send(self, message):
+        if self.DEBUG:
+            rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
+        try:
+            if message["target"] == "all":
+                self.client.publish(f"{self.base_topic}", message)
+            else:
+                self.client.publish(f"{self.base_topic}/{message['target']}", message)
+            return True
+        except Exception as e:
+            rospy.loginfo(f"Error sending message: {e}")
+            return False
+        
+    def get(self):
+        self.client.loop_read()
+        if self.is_available():
+            return self.buffer.get()
+        else:
+            return None
         
     def is_available(self):
         return not self.buffer.empty()
@@ -2390,7 +2440,7 @@ class RosChain:
             self.pk, self.sk = EncryptionModule.generate_keys()
             EncryptionModule.store_keys(f'{self.node_id}_pk.pem', f'{self.node_id}_sk.pem',self.pk,self.sk)
         #define communication module
-        self.comm = RabbitMQCommunicationModule(self.node_id,self.endpoint,self.port,self.auth,self.DEBUG)
+        self.comm = MQTTCommunicationModule(self.node_id,self.endpoint,self.port,self.auth,self.DEBUG)
         #define session manager
         self.sessions = SessionManager(self)
         #define queue
@@ -2570,10 +2620,11 @@ if __name__ == "__main__":
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : secret")
     
-    auth = {
-        "username": rabbitmq_username,
-        "password":rabbitmq_password
-    }
+    #auth = {
+    #    "username": rabbitmq_username,
+    #    "password":rabbitmq_password
+    #}
+    auth = None
   
     node = RosChain(node_id,node_type,rabbitmq_endpoint,int(rabbitmq_port),secret,auth,True)
   
