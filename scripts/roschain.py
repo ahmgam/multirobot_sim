@@ -235,7 +235,7 @@ class MQTTCommunicationModule:
 
     def __init_mqtt(self):
         self.client = mqtt_client.Client(self.node_id)
-        if self.auth == None:
+        if self.auth is not None:
             self.client.username_pw_set(self.auth["username"],self.auth["password"])
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
@@ -250,11 +250,16 @@ class MQTTCommunicationModule:
     def send(self, message):
         if self.DEBUG:
             rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
+        #parse message to string
+        if type(message["message"]) == dict:
+          message["message"] = json.dumps(message["message"])
+        else:
+          message["message"] = str(message["message"])
         try:
             if message["target"] == "all":
-                self.client.publish(f"{self.base_topic}", message)
+                self.client.publish(f"{self.base_topic}", message["message"])
             else:
-                self.client.publish(f"{self.base_topic}/{message['target']}", message)
+                self.client.publish(f"{self.base_topic}/{message['target']}", message["message"])
             return True
         except Exception as e:
             rospy.loginfo(f"Error sending message: {e}")
@@ -511,8 +516,10 @@ class Blockchain:
     #initialize the blockchain
     def __init__(self,parent):
         
+        #define parent
+        self.parent = parent
         # define database manager
-        self.db = Database("db.sqlite3","schema.sql")
+        self.db = Database(f"{self.parent.base_directory}/db.sqlite3",f"{self.parent.base_directory}/schema.sql")
         # create tables
         self.create_tables()
         # define queue for storing data
@@ -521,8 +528,7 @@ class Blockchain:
         self.sync_timeout = 10
         #sync views
         self.views = OrderedDict()
-        #define parent
-        self.parent = parent
+        
  
     ############################################################
     # Database tabels
@@ -2411,7 +2417,7 @@ class NetworkInterface:
 #####################################
 
 class RosChain:
-    def __init__(self,node_id,node_type,endpoint,port,secret_key,auth=None,DEBUG=False):
+    def __init__(self,node_id,node_type,endpoint,port,secret_key,base_directory,auth=None,DEBUG=False):
         '''
         Initialize network interface
         '''
@@ -2433,8 +2439,10 @@ class RosChain:
         self.auth = auth
         #define port
         self.port = port
+        #define base directory
+        self.base_directory = base_directory
         #check if key pairs is available
-        self.pk, self.sk = EncryptionModule.load_keys(f'{self.node_id}_pk.pem', f'{self.node_id}_sk.pem')
+        self.pk, self.sk = EncryptionModule.load_keys(f'{self.base_directory}/{self.node_id}_pk.pem', f'{self.base_directory}/{self.node_id}_sk.pem')
         #if not, create new public and private key pair
         if self.pk == None:
             self.pk, self.sk = EncryptionModule.generate_keys()
@@ -2620,13 +2628,19 @@ if __name__ == "__main__":
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : secret")
     
+    try :
+        base_directory= rospy.get_param(f'{ns}/roschain/base_directory') # node_name/argsname
+        rospy.loginfo("ROSCHAIN:Getting base_directory argument, and got : ", base_directory)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : base_directory")
     #auth = {
     #    "username": rabbitmq_username,
     #    "password":rabbitmq_password
     #}
     auth = None
   
-    node = RosChain(node_id,node_type,rabbitmq_endpoint,int(rabbitmq_port),secret,auth,True)
+    node = RosChain(node_id,node_type,rabbitmq_endpoint,int(rabbitmq_port),secret,base_directory,auth,True)
   
     while not rospy.is_shutdown():
         #pop message from output queue

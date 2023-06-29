@@ -3,7 +3,8 @@
     <arg name="rabbitmq_endpoint" default="localhost"/>
     <arg name="rabbitmq_username" default="admin"/>
     <arg name="rabbitmq_password" default="passw123"/>
-    <arg name="rabbitmq_port" default="5672"/>
+    <arg name="rabbitmq_port" default="1883"/>
+    <arg name="base_dir" default="$(find multirobot_sim)/scripts"/>
     <arg name="secret" default="abc123"/>
   <!-- Load the world -->
 
@@ -16,6 +17,7 @@
     <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
     <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
     <arg name="secret" value="$(arg secret)"/>
+    <arg name="base_directory" value="$(arg base_dir)"/>
   </include>
   <!-- Spawn robot 2-->
   <include file="$(find multirobot_sim)/launch/blockchain.launch">
@@ -26,5 +28,6 @@
     <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
     <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
     <arg name="secret" value="$(arg secret)"/>
+    <arg name="base_directory" value="$(arg base_dir)"/>
   </include>
 </launch>

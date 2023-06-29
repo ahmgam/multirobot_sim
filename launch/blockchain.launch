@@ -7,6 +7,7 @@
     <arg name="rabbitmq_password"/>
     <arg name="rabbitmq_port"/>
     <arg name="secret"/>
+     <arg name="base_directory"/>
 
   <!--Robot namespace-->
     <group ns="$(arg node_id)">
@@ -19,6 +20,7 @@
         <param name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
         <param name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
         <param name="secret" value="$(arg secret)"/>
+        <param name="base_directory" value="$(arg base_directory)"/>
         </node>  
     </group>
 </launch>
