@@ -168,58 +168,6 @@ class EncryptionModule:
 # RabbitMQ Communication Module
 ###################################
 
-class RabbitMQCommunicationModule:
-    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
-        self.node_id = node_id
-        self.endpoint = endpoint
-        self.port = port
-        self.auth = auth
-        self.DEBUG = DEBUG
-        self.buffer = Queue()
-        self.__init_rabbitmq()
-        self.counter = 0
-        self.timeout = 5
-
-    def __init_rabbitmq(self):
-        try:
-            if self.auth == None:
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host = self.endpoint,
-                port=self.port,
-                ))
-            else:
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                    host = self.endpoint,
-                    port=self.port,
-                    credentials=pika.PlainCredentials(self.auth["username"],self.auth["password"])
-                    ))
-            self.channel = self.connection.channel()
-            self.channel.exchange_declare(exchange='brodcast', exchange_type='fanout')
-            self.channel.queue_declare(queue=self.node_id)
-            self.channel.queue_bind(exchange='brodcast', queue=self.node_id)
-        except pika.exceptions.AMQPConnectionError as e:
-            raise Exception(f"Error connecting to RabbitMQ: {e}")
-        
-    def send(self, message):
-        if self.DEBUG:
-            rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
-        try:
-            if message["target"] == "all":
-                self.channel.basic_publish(exchange='brodcast', routing_key='', body=json.dumps(message["message"]))
-            else:
-                self.channel.basic_publish(exchange='', routing_key=message["target"], body=str(message))
-            return True
-        except pika.exceptions.AMQPConnectionError as e:
-            rospy.loginfo(f"Error sending message: {e}")
-            return False
-            
-    def get(self):
-        _, _, body = self.channel.basic_get(queue=self.node_id, auto_ack=True)
-        return body
-        
-    def is_available(self):
-        return not self.buffer.empty()
-
 class MQTTCommunicationModule:
     def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
         self.node_id = node_id
@@ -239,19 +187,27 @@ class MQTTCommunicationModule:
             self.client.username_pw_set(self.auth["username"],self.auth["password"])
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
-        self.client.connect(self.endpoint, self.port)
+        try:
+            self.client.connect(self.endpoint, self.port)
+            self.client.subscribe(f"{self.base_topic}/{self.node_id}")
+            self.client.subscribe(f"{self.base_topic}")
+        except Exception as e:
+            rospy.loginfo(f"Error connecting to MQTT: {e}")
+            return
 
     def on_message(self, client, userdata, message):
-        self.buffer.put(message)
+        self.buffer.put({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"})
 
     def on_connect(self, client, userdata, flags, rc):
-        print(f"{self.node_id}: Connected with result code " + str(rc))
+        rospy.loginfo(f"{self.node_id}: Connected with result code " + str(rc))
+        self.client.subscribe(f"{self.base_topic}/{self.node_id}")
+        self.client.subscribe(f"{self.base_topic}")
         
     def send(self, message):
         if self.DEBUG:
             rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
         #parse message to string
-        if type(message["message"]) == dict:
+        if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
           message["message"] = json.dumps(message["message"])
         else:
           message["message"] = str(message["message"])
@@ -266,13 +222,14 @@ class MQTTCommunicationModule:
             return False
         
     def get(self):
-        self.client.loop_read()
+        #self.client.loop()
         if self.is_available():
             return self.buffer.get()
         else:
             return None
         
     def is_available(self):
+        self.client.loop_read()
         return not self.buffer.empty()
 
 ####################################
@@ -2530,12 +2487,12 @@ class RosChain:
                 if message_buffer:
                     #check message type
                     if str(message_buffer["type"]) == "incoming":
-                        message =Message(message_buffer["message"]) 
+                        message =Message(message_buffer["message"])                         
                         if message.message["node_id"]==self.node_id:
                             continue
-                        elif message.message["type"].startswith("discovery"):
+                        elif str(message.message["type"]).startswith("discovery"):
                             self.discovery.handle(message)
-                        elif message.message["type"].startswith("heartbeat"):
+                        elif str(message.message["type"]).startswith("heartbeat"):
                             self.heartbeat.handle(message)
                         elif message.message["type"]=="data_exchange":
                             #for test purposes
