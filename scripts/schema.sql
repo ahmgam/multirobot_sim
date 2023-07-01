@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS paths (
     node_type TEXT NOT NULL,
     pos_x REAL NOT NULL,
     pos_y REAL NOT NULL,
+    path_type TEXT NOT NULL,
     target_id INTEGER NOT NULL,
     commit_id INTEGER NOT NULL,
     path_points TEXT NOT NULL,

@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import KDTree
 from rospy import loginfo
+from rospy import ServiceProxy
 # parameter
 N_SAMPLE = 500  # number of sample_points
 N_KNN = 10  # number of edge from one sampled point
@@ -747,11 +748,149 @@ def perpendicular_distance(point, start, end):
     
     return distance
 
+
+class TaskAllocationManager:
+    def __init__(self,node_id):
+        self.node_id = node_id
+        self.robots = {}
+        self.targets = {}
+        self.tasks = {}
+        self.records= {}
+        self.paths = {}
+        self.idle= {}
+        self.last_id = 0
+        #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
+
+    def sync_records(self):
+        #get new records from blockchain service 
+        records = self.get_blockchain_records()
+        for record in records:
+            self.process_record(record)
+            
+    def process_record(self,record):
+        if record['meta']['table'] == 'states':
+            self.robots[record['data']['node_id']] = record['data']
+        if record['meta']['table'] == 'targets':
+            self.targets[record['data']['node_id']] = record['data']
+        if record['meta']['table'] == 'task_records':
+            data = record['data']
+            if record['record_type'] == 'commit':
+                self.idle[data['node_id']] = False
+            else:
+                self.idle[data['node_id']] = True
+            if data['task_id'] in self.tasks.keys():
+                self.tasks[data['task_id']].append(data)
+            else:
+                self.tasks[data['task_id']] = [data]
+            self.records[data['id']] = data
+        if record['meta']['table'] == 'path':
+            data = record['data']
+            task_id = self.records[data['commit_id']]['task_id']
+            if task_id in self.paths.keys():
+                self.paths[task_id][data['commit_id']] = data
+            else:
+                self.paths[task_id] = {}
+                self.records[task_id][data['commit_id']] = [data]
+        self.last_id = record['meta']['id']
+
+    def is_task_committed(self,task_id):
+        #check all records in task
+        task = self.tasks[task_id]
+        req_uav = int(self.targets[task[0]['target_id']]['needed_uav'])
+        req_ugv = int(self.targets[task[0]['target_id']]['needed_ugv'])
+        committed_uav = 0
+        committed_ugv = 0
+        for record in task:
+            if record['record_type'] == 'commit':
+                if record['node_type'] == 'uav':
+                    committed_uav += 1
+                if record['node_type'] == 'ugv':
+                    committed_ugv += 1
+        if committed_ugv == req_ugv and committed_uav == req_uav:
+            return True
+        else:
+            return False
+
+    def is_task_planned(self,task_id):
+        #get all paths records for a task
+        paths = self.paths[task_id]
+        req_uav = int(self.targets[task_id]['needed_uav'])
+        req_ugv = int(self.targets[task_id]['needed_ugv'])
+        planned_uav = {}
+        planned_ugv = {}
+        for commit_id,path in paths.items():
+            if path['node_type'] == 'uav':
+                planned_uav[commit_id] = path
+            if path['node_type'] == 'ugv':
+                planned_ugv[commit_id] = path
+
+        if len(planned_uav.keys()) != req_uav or len(planned_ugv.keys()) != req_ugv:
+            return False
+        #check paths conflicts 
+        return self.check_conflict([p["path_points"] for p in paths.values()]) and self.check_conflict([planned_uav[p]["path_points"] for p in planned_uav.keys()])
+            
+    def is_task_complete(self,task_id):
+        #check all records in task
+        task = self.tasks[task_id]
+        req_robots = int(self.targets[task[0]['target_id']]['needed_uav']) + int(self.targets[task[0]['target_id']]['needed_ugv'])
+        completed = 0
+        for record in task:
+            if record['record_type'] == 'complete':
+                completed += 1
+        if completed >= req_robots:
+            return True
+        else:
+            return False
+
+    def clear_task(self,task_id):
+        #get task
+        task = self.tasks[task_id]
+        #get all commit ids 
+        record_ids = task.keys()
+        for record_id in record_ids:
+            target_id = task[record_id]['target_id']
+            if target_id in self.targets.keys():
+                del self.targets[target_id]
+            del self.records[record_id]
+        del self.tasks[task_id]
+        del self.paths[task_id]
+
+    def get_target_best_candidates(self,task_id):
+        pass
+
+    def is_robot_idle(self,robot_id):
+        return self.idle[robot_id]
+    
+    def add_target(self,target):
+        pass
+
+    def update_state(self,state):
+        pass
+
+    def commmit_to_target(self,robot_id,target):
+        pass
+
+    def get_robot_state(self,robot_id):
+        pass
+
+    def allocate_robots_to_target(self,task_id):
+        pass
+
+    def send_to_blockchain(self,message):
+        pass
+
+    def set_initial_path_to_target(self,target):
+        pass
+
+    def reset_path_to_target(self,robot_id,paths):
+        pass
+
+    def check_conflict(self,paths):
+        pass
+
+
+
 if __name__ == '__main__':
-
-
-
-
 
     # start and goal position
     sx = 10.0  # [m]

@@ -8,7 +8,6 @@ from math import ceil
 from rospy import loginfo
 import datetime
 from queue import Queue
-import pika 
 import rospy
 import sqlite3
 import queue
@@ -19,7 +18,8 @@ from string import digits, ascii_uppercase,ascii_lowercase
 from gazebo_msgs.srv import GetModelState
 from paho.mqtt import client as mqtt_client
 
-#from multirobot_sim.srv import GetBCRecords,SubmitTransaction
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction
+
 
 #################################
 # Encryption Module
@@ -2430,12 +2430,16 @@ class RosChain:
         self.cron_procedures.append(self.discovery.cron)
         self.cron_procedures.append(self.consensus.cron)
         self.cron_procedures.append(self.blockchain.cron)
-        #define records service
-        #self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetNewRecords,lambda req: self.get_records(self,req))
-        #define submit message service
-        #self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitMessage,lambda req: self.submit_message(self,req))
+        
         #define ros node
         self.node = rospy.init_node("roschain", anonymous=True)
+        rospy.logerr(os.getcwd())
+        print(os.getcwd())
+        #define records service
+        self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetNewRecords,lambda req: self.get_records(self,req))
+        #define submit message service
+        self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitMessage,lambda req: self.submit_message(self,req))
+        
            
     @staticmethod
     def submit_message(self,message):
@@ -2597,7 +2601,7 @@ if __name__ == "__main__":
     #    "password":rabbitmq_password
     #}
     auth = None
-  
+    
     node = RosChain(node_id,node_type,rabbitmq_endpoint,int(rabbitmq_port),secret,base_directory,auth,True)
   
     while not rospy.is_shutdown():
