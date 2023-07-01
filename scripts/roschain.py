@@ -216,6 +216,7 @@ class MQTTCommunicationModule:
                 self.client.publish(f"{self.base_topic}", message["message"])
             else:
                 self.client.publish(f"{self.base_topic}/{message['target']}", message["message"])
+            self.counter += 1
             return True
         except Exception as e:
             rospy.loginfo(f"Error sending message: {e}")
