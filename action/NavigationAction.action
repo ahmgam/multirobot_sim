@@ -1,0 +1,8 @@
+#goal definition
+geometry_msgs/Point[] points
+---
+#result definition
+bool success
+---
+#feedback
+float32 percentComplete

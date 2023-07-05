@@ -2436,16 +2436,19 @@ class RosChain:
         rospy.logerr(os.getcwd())
         print(os.getcwd())
         #define records service
-        self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetBCRecords,lambda req: self.get_records(self,req))
+        self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetBCRecords,lambda req: self.get_records(self,**req))
         #define submit message service
-        self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitTransaction,lambda req: self.submit_message(self,req))
-        
-           
-    @staticmethod
-    def submit_message(self,message):
+        self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitTransaction,lambda req: self.submit_message(self,**req))
+    
+    @staticmethod           
+    def submit_message(self,table_name,data):
         '''
         Send message to the given public key
         '''
+        message = {
+            "table_name":table_name,
+            "data":data
+        }
         #payload 
         payload = {
             "message":message,

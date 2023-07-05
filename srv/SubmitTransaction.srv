@@ -1,3 +1,4 @@
+string table_name
 string message
 ---
 string echo
