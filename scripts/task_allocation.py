@@ -1,7 +1,7 @@
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction
 from rospy import ServiceProxy
 import json
-from actionlib import SimpleActionClient
+from actionlib import SimpleActionClient,GoalStatus
 from rospy import ServiceProxy
 import numpy as np
 from multirobot_sim.action import NavigationAction
@@ -15,8 +15,9 @@ class TaskAllocationManager:
         self.tasks = {}
         self.records= {}
         self.paths = {}
-        self.idle= {}
+        self.idle= {self.node_id:True}
         self.waiting_message = None
+        self.ongoing_task = None
         self.last_id = 0
         self.get_blockchain_records = ServiceProxy(f'{self.node_id}/get_records',GetBCRecords)
         self.submit_message = ServiceProxy(f'{self.node_id}/submit_message',SubmitTransaction)
@@ -27,8 +28,9 @@ class TaskAllocationManager:
 
     def sync_records(self):
         #get new records from blockchain service 
-        records = self.get_blockchain_records(self.last_id)
+        records = self.get_blockchain_records(GetBCRecords(last_trans_id=self.last_id))
         for record in records:
+            record = json.loads(record)
             self.process_record(record)
             
     def process_record(self,record):
@@ -59,6 +61,8 @@ class TaskAllocationManager:
                 self.paths[target_id] = {}
                 self.records[target_id][data['commit_id']] = data
         self.last_id = record['meta']['id']
+        if self.is_in_waiting(record['data'],record['meta']['table']):
+                self.waiting_message = None
 
     def is_task_fully_committed(self,task_id):
         #check all records in task
@@ -152,7 +156,21 @@ class TaskAllocationManager:
                     needed_ugv -= 1
         return robots
 
-    
+    def get_best_target(self):
+        target_id = None
+        best_targets = []
+        for id,target in self.targets.items():
+            robots = self.get_target_best_candidates(id)
+            for robot in robots:
+                if robot['node_id'] == self.node_id :
+                    best_targets.append(robot)
+
+        #sort best targets
+        best_targets.sort(key=lambda x: x['distance'], reverse=True)
+        if len(best_targets) > 0:
+            target_id = best_targets[0]['node_id']
+        return target_id
+
     def is_task_executable(self,target_id):
         #get needed uav and ugv
         needed_uav = int(self.targets[target_id]['needed_uav'])
@@ -171,7 +189,6 @@ class TaskAllocationManager:
             return False
 
         
-    
     def caluculate_distance(self,robot_pos,goal):
         #calculate euclidean distance
         return np.sqrt((goal[0] - robot_pos[0])**2 + (goal[1] - robot_pos[1])**2)
@@ -182,28 +199,26 @@ class TaskAllocationManager:
     def add_target(self,target):
         pass
 
-    def update_state(self,state):
-        pass
+    def commmit_to_target(self,target):
+        #prepare payload
+        payload = {
+            'node_id':self.node_id,
+            'target_id':target,
+            'record_type':'commit'
+        }
+        self.add_waiting_message(payload,'task_records')
+        msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
+        self.submit_message(msg)
 
-    def commmit_to_target(self,robot_id,target):
-        pass
+    def add_waiting_message(self,message,msg_type):
+        self.waiting_message = {
+            "type":msg_type,
+            "message":message
+        }
 
-    def get_robot_state(self,robot_id):
+    def start_task(self,path):
         pass
-
-    def allocate_robots_to_target(self,task_id):
-        pass
-
-    def send_to_blockchain(self,message):
-        pass
-
-    def set_initial_path_to_target(self,target):
-        pass
-
-    def reset_path_to_target(self,robot_id,paths):
-        pass
-
-    def check_conflict(self,paths):
+    def check_conflict(self,my_path,other_paths):
         pass
 
     def is_committed(self):
@@ -215,20 +230,70 @@ class TaskAllocationManager:
         return False,None
     
     
-    def is_in_waiting(self,message=None):
+    def is_in_waiting(self,message=None,msg_type=None):
+        if self.waiting_message == None:
+            return False
         #check if message is in waiting
-        if not message:
-            return True if self.waiting else False
-        else:
+        if message!= None and msg_type != None:
             if type(message) == str:
                 message = json.loads(message)
-            for key in list(set(message.keys()).intersection(set(self.waiting.keys()))):
-                if self.waiting_message[key] != message[key]:
+            if msg_type != self.waiting_message['type']:
+                return False
+            for key in list(set(message.keys()).intersection(set(self.waiting_message['message'].keys()))):
+                if self.waiting_message['message'][key] != message[key]:
                     return False
             return True
-
+        return True
+    def send_complete_message(self):
+        #send complete message to blockchain
+        payload = {
+            'node_id':self.node_id,
+            'record_type':'complete',
+            'target_id':self.ongoing_task['target_id']
+        }
+        self.add_waiting_message(payload,'task_records')
+        msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
+        
     def check_ongoing_task(self):
+        #check the status of ongoing task
+        if self.navigation_client.get_state() == GoalStatus.SUCCEEDED:
+            #set robot state to idle
+            self.idle[self.node_id] = True
+            #send complete message to blockchain
+            self.send_complete_message()
+        return
+
+    def is_path_submitted(self,target_id):
+        for path in self.paths[target_id].values():
+            if path['node_type'] == 'uav':
+                return True,path
+        return False,None
+    
+    def calculate_path_legnth(self,points):
+        length = 0
+        for i in range(len(points)-1):
+            length += self.caluculate_distance(points[i],points[i+1])
+        return length
+
+    def submit_path(self,target_id,commit_id,path,path_type='initial'):
+        #prepare payload
+        payload = {
+            'node_id':self.node_id,
+            'target_id':target_id,
+            'path_type':path_type,
+            'node_type': self.node_type,
+            'commit_id':commit_id,
+            'path_points':json.dumps(path),
+            'x_pos': self.targets[target_id]['pos_x'],
+            'y_pos': self.targets[target_id]['pos_y'],
+            'distance':self.calculate_path_legnth(path)
+        }
+        self.add_waiting_message(payload,'paths')
+        msg = SubmitTransaction(table_name='paths',message=json.dumps(payload))
+        self.submit_message(msg)
+    def plan_path(self,target_id,avoid_conflicts= False):
         pass
+            
     def loop(self):
         #sync the robot with blockchain
         self.sync_records()
@@ -236,6 +301,60 @@ class TaskAllocationManager:
         if not self.is_robot_idle(self.node_id):
             self.check_ongoing_task()
             return
+        
+        #check if anything in waiting list
+        if self.is_in_waiting():
+            return
+        
+        is_committed,record = self.is_committed()
+        if not is_committed:
+            #get best target for me
+            target_id = self.get_best_target()
+            if target_id == None:
+                return 
+            #commit to target
+            self.commmit_to_target(target_id)
+            return
+        if not self.is_task_fully_committed(record['target_id']):
+            return
+        
+        is_submitted,path = self.is_path_submitted(record['target_id'])
+        if not is_submitted:
+            #plan a path for the target and submit it to waiting list
+            if self.is_in_waiting(
+                {'node_id':self.node_id,
+                 'target_id':record['target_id']},
+                 'path'):
+                return
+            
+            #plan a path for the target and submit it to waiting list
+            path = self.plan_path(record['target_id'])
+            if path == None:
+                return
+            #submit path to waiting list
+            self.submit_path(record['target_id'],record['id'],path)
+            return
+        
+        #check if paths is all there 
+        if not self.is_task_executable(record['target_id']):
+            return
+        
+        #check if there any conflicts
+        conflicted_ids = self.check_conflict(record['target_id'])
+
+        if not conflicted_ids:
+            #allocate robots to target
+            self.start_task(path)
+            return
+        
+        #if found conflict, plan a new path for the robot
+        path = self.plan_path(record['target_id'],True)
+        if path == None:
+            return
+        self.submit_path(record['target_id'],record['id'],path,'reset')
+
+            
+        
         
 if __name__ == "__main__":
     robot = TaskAllocationManager("s")

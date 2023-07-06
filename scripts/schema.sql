@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS targets (
 );
 CREATE TABLE IF NOT EXISTS task_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id INTEGER NOT NULL,
     node_id TEXT NOT NULL,
     record_type TEXT NOT NULL,
     target_id INTEGER NOT NULL,
