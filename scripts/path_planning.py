@@ -399,10 +399,10 @@ class PRM:
 # A* algorithm
 ######################################
 class AStar:
-    def __init__(self, occupGrid,gridInfo, window=1,simplify=True):
+    def __init__(self, window=1,simplify=True):
         self.window = window
-        self.info = gridInfo
-        self.grid = occupGrid
+        self.info = None
+        self.grid = None
         self.start = None
         self.goal = None
         self.open = []
@@ -419,6 +419,9 @@ class AStar:
         loginfo("Setting goal to: " + str(goal))
         self.goal = self.node((goal[0],goal[1]))
 
+    def setMap(self, grid,info):
+        self.grid = grid
+        self.info = info
     def node(self, position, parent=None):
         return Node(position, parent)
 
@@ -499,10 +502,11 @@ class AStar:
                 
 
 class RTT: 
-    def __init__(self,occuGrid,gridInfo,incDist=1):
+    def __init__(self,incDist=1):
         self.start = None
-        self.grid = occuGrid
         self.tree = []
+        self.grid = None
+        self.info = None
         self.xMax = gridInfo['width']
         self.yMax = gridInfo['height']
         self.maxDist = np.sqrt(self.xMax**2 + self.yMax**2)
@@ -518,7 +522,9 @@ class RTT:
         self.start = start
         self.tree=[start]
 
-
+    def setMap(self, grid,info):
+        self.grid = grid
+        self.info = info
     def flush(self):
         self.tree = [self.start]
         self.verts = []

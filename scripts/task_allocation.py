@@ -3,13 +3,123 @@ from rospy import ServiceProxy
 import json
 from actionlib import SimpleActionClient,GoalStatus
 from rospy import ServiceProxy
+import rospy
 import numpy as np
 from multirobot_sim.action import NavigationAction,NavigationActionGoal
 from geometry_msgs.msg import Point
+from nav_msgs.msg import Odometry,Path,OccupancyGrid
+from geometry_msgs.msg import PoseStamped,Point,Pose
+from nav_msgs.srv import GetMap
+from path_planning import AStar,RTT
+
+class Planner:
+    def __init__(self,odom_topic,algorithm=None):
+        self.path = Path()
+        self.goal=None
+        self.map = self.getTheMap()
+        self.modified_map = self.map
+        self.odom_topic= odom_topic
+        odom = self.getOdomMsg()
+        self.start = (odom.pose.pose.position.x,odom.pose.pose.position.y)
+        rospy.loginfo(f"map size is {len(self.map.data)}")
+        self.grid = self.formatGrid(self.map)
+        rospy.loginfo(f"planner:Grid formatted, shape is {self.grid.shape}")
+        self.gridInfo = self.formatGridInfo(self.map.info)
+        rospy.loginfo(f"planner:Grid info formatted, info is {self.gridInfo}")
+        self.algorithm = self.defineAlgorithm(algorithm)
+        rospy.loginfo(f"planner:Algorithm defined, algorithm is {type(self.algorithm)}")
+
+    def getTheMap(self,mapService='/static_map'):
+        #wait for map service
+        rospy.loginfo("simple_controller:Waiting for map service")
+        serv = rospy.ServiceProxy(mapService, GetMap)
+        serv.wait_for_service()
+        map = serv().map
+        return map
+    
+    def getOdomMsg(self):
+        odom = rospy.wait_for_message(self.odom_topic, Odometry)
+        return odom
+    def defineAlgorithm(self,algorithm):
+        if algorithm is None:
+            return None
+        if algorithm == "AStar":
+            return AStar(self.grid,self.gridInfo)
+        if algorithm == "RTT":
+            return RTT(self.grid,self.gridInfo)
+
+    def formatGrid(self,grid):
+        #convert grid to 2d array
+        return np.array(grid.data).reshape(grid.info.height,grid.info.width)
+
+    def formatGridInfo(self,info):
+        return {
+            "width":info.width,
+            "height":info.height,
+            "resolution":info.resolution,
+            "origin":(info.origin.position.x,info.origin.position.y)
+        }
+    
+    def posToGrid(self,pos):
+        x,y = pos[0],pos[1]
+        x = int((x - self.gridInfo["origin"][0])/self.gridInfo["resolution"])
+        y = int((y - self.gridInfo["origin"][1])/self.gridInfo["resolution"])
+        return (x,y)
+
+    def gridToPos(self,grid):
+        x,y = grid
+        x = x*self.gridInfo["resolution"] + self.gridInfo["origin"][0]
+        y = y*self.gridInfo["resolution"] + self.gridInfo["origin"][1]
+        return (x,y)
+
+    def parsePath(self,path):
+        formattedPath = Path()
+        formattedPath.header.frame_id = "map"
+        for node in path:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            node = self.gridToPos(node)
+            pose.pose.position.x = node[0]
+            pose.pose.position.y = node[1]
+            pose.pose.position.z = 0
+            formattedPath.poses.append(pose)
+        return formattedPath
+
+    def mergePathsWithMap(self,other_paths):
+        pass
+
+    def clearModifiedMap(self):
+        self.modified_map = self.map
+
+    def plan(self,other_paths=None):
+        if self.algorithm is None:
+            if self.goal is None:
+                return
+            self.path = self.parsePath([self.goal])
+        else :
+            
+            self.algorithm.setStart(self.posToGrid(self.start))
+            rospy.loginfo(f"planner:Start set to {self.algorithm.start}")
+            self.algorithm.setGoal(self.posToGrid(self.goal))
+            rospy.loginfo(f"planner:Goal set to {self.algorithm.goal}")
+            if other_paths is None:
+                self.algorithm.setMap(self.map,self.gridInfo)
+                self.algorithm.plan()
+            else:
+                self.mergePathsWithMap(other_paths)
+                self.algorithm.setMap(self.modified_map,self.gridInfo)
+                self.algorithm.plan()
+                self.clearModifiedMap()
+            
+            self.path = self.parsePath(self.algorithm.path)
+
+    def setGoal(self, x, y,z):
+        self.goal = (x, y,z)
+        rospy.loginfo(f"planner:Goal set to {self.goal}")
 
 
 class TaskAllocationManager:
-    def __init__(self,node_id):
+    def __init__(self,node_id,odom_topic,planningAlgorithm=None):
         self.node_id = node_id
         self.robots = {}
         self.targets = {}
@@ -25,6 +135,7 @@ class TaskAllocationManager:
         self.get_blockchain_records.wait_for_service()
         self.submit_message.wait_for_service()
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationAction)
+        self.planner = Planner(odom_topic,planningAlgorithm)
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
 
     def sync_records(self):
@@ -322,7 +433,9 @@ class TaskAllocationManager:
         msg = SubmitTransaction(table_name='paths',message=json.dumps(payload))
         self.submit_message(msg)
     def plan_path(self,target_id,avoid_conflicts= False):
-        pass
+        self.planner.setGoal((self.targets[target_id]['pos_x'],self.targets[target_id]['pos_y']))
+        self.planner.plan()
+        return self.planner.path
             
     def loop(self):
         #sync the robot with blockchain
