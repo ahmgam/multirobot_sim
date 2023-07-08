@@ -4,7 +4,8 @@ import json
 from actionlib import SimpleActionClient,GoalStatus
 from rospy import ServiceProxy
 import numpy as np
-from multirobot_sim.action import NavigationAction
+from multirobot_sim.action import NavigationAction,NavigationActionGoal
+from geometry_msgs.msg import Point
 
 
 class TaskAllocationManager:
@@ -215,11 +216,40 @@ class TaskAllocationManager:
             "type":msg_type,
             "message":message
         }
-
+    
+    def format_path(self,path):
+        #convert path from list of tuples to list of points
+        points = []
+        for point in path:
+            points.append(Point(point[0],point[1],0))
+        return points
+    
     def start_task(self,path):
-        pass
-    def check_conflict(self,my_path,other_paths):
-        pass
+        goal = NavigationActionGoal(points=self.format_path(path))
+        self.navigation_client.send_goal(goal)
+        
+    def check_conflict(self,target_id):
+        all_paths = self.paths[target_id].values()
+        conflicted_paths = []
+        while len(all_paths) > 0:
+            first_path = all_paths[0]
+            for i in range(1,len(all_paths)):
+                if self.are_paths_intersection(first_path["path_points"],all_paths[i]["path_points"]):
+                    conflicted_paths.append((first_path["commit_id"],all_paths[i]["commit_id"]))
+                    
+            all_paths.remove(first_path)
+        return conflicted_paths
+
+    def are_paths_intersection(self,waypoints1,waypoints2):
+        if len(list(set(waypoints1).intersection(waypoints2))) != 0:
+            return True
+        ccw = lambda A,B,C: (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+        do_segments_intersect= lambda A,B,C,D: ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
+        for i in range(len(waypoints1) - 1):
+            for j in range(len(waypoints2) - 1):
+                if do_segments_intersect(waypoints1[i], waypoints1[i + 1], waypoints2[j], waypoints2[j + 1]):
+                    return True
+        return False
 
     def is_committed(self):
         #check if current robot has committed to a target
@@ -342,16 +372,22 @@ class TaskAllocationManager:
         #check if there any conflicts
         conflicted_ids = self.check_conflict(record['target_id'])
 
-        if not conflicted_ids:
+        if len (conflicted_ids) == 0:
             #allocate robots to target
             self.start_task(path)
             return
         
-        #if found conflict, plan a new path for the robot
-        path = self.plan_path(record['target_id'],True)
-        if path == None:
-            return
-        self.submit_path(record['target_id'],record['id'],path,'reset')
+        #if found conflict, check if I need to plan path again
+        is_conflicted = False
+        for conf in conflicted_ids:
+            if record["id"] in conf:
+                is_conflicted = True
+                break
+        if is_conflicted:
+            path = self.plan_path(record['target_id'],True)
+            if path == None:
+                return
+            self.submit_path(record['target_id'],record['id'],path,'reset')
 
             
         
