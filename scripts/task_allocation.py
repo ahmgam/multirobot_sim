@@ -3,6 +3,7 @@ from rospy import ServiceProxy
 import json
 from actionlib import SimpleActionClient,GoalStatus
 from rospy import ServiceProxy
+from datetime import datetime
 import rospy
 import numpy as np
 from multirobot_sim.action import NavigationAction,NavigationActionGoal
@@ -12,6 +13,8 @@ from geometry_msgs.msg import PoseStamped,Point,Pose
 from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
 
+#default value of state update interval
+UPDATE_INTERVAL = 3
 class Planner:
     def __init__(self,odom_topic,algorithm=None):
         self.path = Path()
@@ -85,8 +88,47 @@ class Planner:
             formattedPath.poses.append(pose)
         return formattedPath
 
+    def generate_line_points(self,p1, p2):
+        """Generate a list of points in a line from p1 to p2 using Bresenham's line algorithm."""
+        x1, y1 = p1
+        x2, y2 = p2
+        points = []
+        is_steep = abs(y2 - y1) > abs(x2 - x1)
+        if is_steep:
+            x1, y1 = y1, x1
+            x2, y2 = y2, x2
+        swapped = False
+        if x1 > x2:
+            x1, x2 = x2, x1
+            y1, y2 = y2, y1
+            swapped = True
+        dx = x2 - x1
+        dy = y2 - y1
+        error = int(dx / 2.0)
+        y = y1
+        if y1 < y2:
+            ystep = 1
+        else:
+            ystep = -1
+        for x in range(x1, x2 + 1):
+            coord = (y, x) if is_steep else (x, y)
+            points.append(coord)
+            error -= abs(dy)
+            if error < 0:
+                y += ystep
+                error += dx
+        # Reverse the list if the coordinates were swapped
+        if swapped:
+            points.reverse()
+        return points
     def mergePathsWithMap(self,other_paths):
-        pass
+        for path in other_paths:
+            for i in range(len(path)-1):
+                p1 = path[i]
+                p2 = path[i+1]
+                points = self.generate_line_points(p1,p2)
+                for point in points:
+                    self.modified_map[point[0],point[1]] = 100
 
     def clearModifiedMap(self):
         self.modified_map = self.map
@@ -119,13 +161,17 @@ class Planner:
 
 
 class TaskAllocationManager:
-    def __init__(self,node_id,odom_topic,planningAlgorithm=None):
+    def __init__(self,node_id,node_type,odom_topic,planningAlgorithm=None,update_interval=UPDATE_INTERVAL):
         self.node_id = node_id
+        self.node_type = node_type
+        self.odom_topic = odom_topic
         self.robots = {}
         self.targets = {}
         self.tasks = {}
         self.records= {}
         self.paths = {}
+        self.pos_x = None
+        self.pos_y = None
         self.idle= {self.node_id:True}
         self.waiting_message = None
         self.ongoing_task = None
@@ -136,7 +182,14 @@ class TaskAllocationManager:
         self.submit_message.wait_for_service()
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationAction)
         self.planner = Planner(odom_topic,planningAlgorithm)
+        self.update_interval = update_interval
+        self.last_state = datetime.now()
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
+    
+    def update_position(self):
+        odom = rospy.wait_for_message(self.odom_topic, Odometry)
+        self.pos_x = odom.pose.pose.position.x
+        self.pos_y = odom.pose.pose.position.y
 
     def sync_records(self):
         #get new records from blockchain service 
@@ -308,9 +361,6 @@ class TaskAllocationManager:
     def is_robot_idle(self,robot_id):
         return self.idle[robot_id]
     
-    def add_target(self,target):
-        pass
-
     def commmit_to_target(self,target):
         #prepare payload
         payload = {
@@ -360,7 +410,7 @@ class TaskAllocationManager:
             for j in range(len(waypoints2) - 1):
                 if do_segments_intersect(waypoints1[i], waypoints1[i + 1], waypoints2[j], waypoints2[j + 1]):
                     return True
-        return False
+        return False 
 
     def is_committed(self):
         #check if current robot has committed to a target
@@ -437,7 +487,30 @@ class TaskAllocationManager:
         self.planner.plan()
         return self.planner.path
             
+    def submit_node_state(self):
+        #submit node state to blockchain
+        payload = {
+            'node_id':self.node_id,
+            'node_type':self.node_type,
+            'timecreated':datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'pos_x':self.targets[self.node_id]['pos_x'],
+            'pos_y':self.targets[self.node_id]['pos_y'],
+            'details': ""
+        }
+        self.add_waiting_message(payload,'node_state')
+        msg = SubmitTransaction(table_name='node_state',message=json.dumps(payload))
+        self.submit_message(msg)
+
     def loop(self):
+        #update position
+        self.update_position()
+        ##check if any message is waiting
+        if not self.is_in_waiting():
+            #check if time interval is reached since last state update
+            if (datetime.now() - self.last_state_update).total_seconds() > self.time_interval:
+                self.last_state_update = datetime.now()
+                self.submit_node_state() 
+
         #sync the robot with blockchain
         self.sync_records()
         #check if robot it idle
@@ -502,9 +575,37 @@ class TaskAllocationManager:
                 return
             self.submit_path(record['target_id'],record['id'],path,'reset')
 
-            
-        
-        
 if __name__ == "__main__":
-    robot = TaskAllocationManager("s")
+    ns = rospy.get_namespace()
+    try :
+        node_id= rospy.get_param(f'{ns}/task_allocator/node_id') # node_name/argsname
+        rospy.loginfo("task_allocator:Getting node_id argument, and got : ", node_id)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_id")
+
+    try :
+        node_type= rospy.get_param(f'{ns}/task_allocator/node_type') # node_name/argsname
+        rospy.loginfo("task_allocator:Getting node_type argument, and got : ", node_type)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_type")
+    
+    
+    try :
+        odom_topic= rospy.get_param(f'{ns}/task_allocator/odom_topic') # node_name/argsname
+        rospy.loginfo("task_allocator:Getting odom_topic argument, and got : ", odom_topic)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : odom_topic")
+    
+    try :
+        update_interval= rospy.get_param(f'{ns}/task_allocator/update_interval') # node_name/argsname
+        rospy.loginfo("task_allocator:Getting update_interval argument, and got : ", update_interval)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : update_interval")
+    
+ 
+    robot = TaskAllocationManager(node_id,node_type,odom_topic,update_interval)
     robot.loop()
