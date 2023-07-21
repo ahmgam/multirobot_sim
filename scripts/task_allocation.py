@@ -606,6 +606,6 @@ if __name__ == "__main__":
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : update_interval")
     
- 
     robot = TaskAllocationManager(node_id,node_type,odom_topic,update_interval)
-    robot.loop()
+    while not rospy.is_shutdown():
+        robot.loop()
