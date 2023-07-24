@@ -22,5 +22,11 @@
         <param name="secret" value="$(arg secret)"/>
         <param name="base_directory" value="$(arg base_directory)"/>
         </node>  
+        <node pkg="multirobot_sim" type="task_allocation.py" name="task_allocator" output="screen" required="true">
+        <param name="node_id" value="$(arg node_id)"/>
+        <param name="node_type" value="$(arg node_type)"/>
+        <param name="odom_topic" value="/$(arg node_id)/odom"/>
+        <param name="update_interval" value="5"/>
+        </node>  
     </group>
 </launch>

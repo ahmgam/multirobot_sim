@@ -9,6 +9,7 @@ import pygame
 from cv2 import resize,imread
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
+from multirobot_sim.srv import AddGoal
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5
 ROBOT_SIZE_UGV = 0.5
@@ -25,6 +26,9 @@ UAV_GOAL_TOPIC = "/goal"
 #UAV_GOAL_TOPIC = "/command/pose"
 UGV_PATH_TOPIC = "path"
 UAV_PATH_TOPIC = "path"
+
+NEEDED_UAVS = 1
+NEEDED_UGVS = 1
 
 class PyMonitor:
   def __init__(self):
@@ -246,7 +250,9 @@ class PyMonitor:
     z=resp_coordinates.pose.position.z
     return (x,y,z),self.worldToPixel(x,y,self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
   
+  '''
   def publishGoal(self,robot):
+
     if robot["goal"] is not None:
       if robot["type"] == "ugv":
         topic = f'/{robot["name"]}{UGV_GOAL_TOPIC}'
@@ -254,6 +260,18 @@ class PyMonitor:
         topic = f'/{robot["name"]}{UAV_GOAL_TOPIC}'
       pub = rospy.Publisher(topic, PoseStamped, queue_size=10)
       pub.publish(self.createGoal(*robot["goal"]))  
+  '''
+  def publishGoal(self,robot):
+    if robot["goal"] is not None:
+      rospy.ServiceProxy(f"{robot['name']}/add_target", AddGoal)(
+        AddGoal(
+          x=robot["goal"][0],
+          y=robot["goal"][1],
+          needed_uav=NEEDED_UAVS,
+          needed_ugv=NEEDED_UGVS
+        )
+      )
+    
 
   def watchForGoal(self,robot):
     if robot["goal"] is not None and self.inTolerance(*robot["loc"],*robot["goal"],TOLERANCE):
