@@ -1,6 +1,7 @@
 <launch>
   <!--Arguments-->
-<arg name="world_file" value="/home/gemy/robot_ws/src/multirobot_sim/worlds/testworld.world"/>
+  <arg name="mav_name" default="firefly"/>
+  <arg name="world_file" value="/home/gemy/robot_ws/src/multirobot_sim/worlds/testworld.world"/>
   <arg name="map_file" default="/home/gemy/robot_ws/src/multirobot_sim/maps/map.yaml"/>
   <arg name="enable_logging" default="false" />
   <arg name="enable_ground_truth" default="true" />

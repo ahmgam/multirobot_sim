@@ -62,6 +62,7 @@ add_service_files(
   FILES
   GetBCRecords.srv
   SubmitTransaction.srv
+  AddGoal.srv
 )
 
 ## Generate actions in the 'action' folder
