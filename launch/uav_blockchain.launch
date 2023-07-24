@@ -1,0 +1,73 @@
+<launch>
+    <!--arg name="mav_name" default="hummingbird"/-->
+    <arg name="robot_name" default="uav"/>
+    <arg name="x" default="0"/>
+    <arg name="y" default="0"/>
+    <arg name="z" default="0"/>
+    <arg name="mav_name" default="firefly"/>
+    <arg name="node_type"/>
+    <arg name="rabbitmq_endpoint"/>
+    <arg name="rabbitmq_username"/>
+    <arg name="rabbitmq_password"/>
+    <arg name="rabbitmq_port"/>
+    <arg name="secret"/>
+    <arg name="base_directory"/>
+
+    <!-- env variables-->
+    <env name="GAZEBO_MODEL_PATH" value="${GAZEBO_MODEL_PATH}:$(find rotors_gazebo)/models"/>
+    <env name="GAZEBO_RESOURCE_PATH" value="${GAZEBO_RESOURCE_PATH}:$(find rotors_gazebo)/models"/>
+    <!-- Robot namespace-->
+    <group ns="$(arg robot_name)">
+        <!--Spawn the robot-->
+        <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
+            <arg name="mav_name" value="$(arg mav_name)" />
+            <arg name="model" value="$(find rotors_description)/urdf/mav_generic_odometry_sensor.gazebo" />
+            <arg name="enable_logging" value="false" />
+            <arg name="enable_ground_truth" value="true" />
+            <arg name="log_file" value="$(arg mav_name)"/>
+            <arg name="namespace" value="$(arg robot_name)"/>
+            <arg name="x" value="$(arg x)"/>
+            <arg name="y" value="$(arg y)"/>
+            <arg name="z" value="0.0"/>
+        </include>
+        <!-- Load the controller -->
+        <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
+            <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_$(arg mav_name).yaml" />
+            <rosparam command="load" file="$(find rotors_gazebo)/resource/$(arg mav_name).yaml" />
+            <remap from="odometry" to="odometry_sensor1/odometry" />
+        </node>
+        <!-- Start flying -->
+        <node name="hovering_example" pkg="rotors_gazebo" type="hovering_example" output="screen">
+            <param name="x" value="$(arg x)"/>
+            <param name="y" value="$(arg y)"/>
+            <param name="z" value="$(arg z)"/>
+        </node>
+        <!-- Repeater node-->
+        <node name="repeater" pkg="multirobot_sim" type="repeater.py" output="screen">
+            <param name="model_name" value="$(arg robot_name)"/>
+            <param name="source_topic" value="goal"/>
+            <param name="target_topic" value="command/pose"/>
+            <param name="path_topic" value="path"/>
+        </node>
+        <!-- robot state publisher-->
+        <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+        <!-- joint state publisher-->
+        <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+        <node pkg="multirobot_sim" type="roschain.py" name="roschain" output="screen" required="true">
+            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_type" value="$(arg node_type)"/>
+            <param name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
+            <param name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
+            <param name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+            <param name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+            <param name="secret" value="$(arg secret)"/>
+            <param name="base_directory" value="$(arg base_directory)"/>
+        </node>  
+        <node pkg="multirobot_sim" type="task_allocation.py" name="task_allocator" output="screen" required="true">
+            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_type" value="$(arg node_type)"/>
+            <param name="odom_topic" value="/$(arg robot_name)/odom"/>
+            <param name="update_interval" value="5"/>
+        </node>  
+    </group>
+</launch>
