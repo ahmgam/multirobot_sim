@@ -1,5 +1,5 @@
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction
-from rospy import ServiceProxy
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal
+from rospy import ServiceProxy,Service
 import json
 from actionlib import SimpleActionClient,GoalStatus
 from rospy import ServiceProxy
@@ -137,7 +137,7 @@ class Planner:
         if self.algorithm is None:
             if self.goal is None:
                 return
-            self.path = self.parsePath([self.goal])
+            self.path = [self.goal]
         else :
             
             self.algorithm.setStart(self.posToGrid(self.start))
@@ -153,7 +153,7 @@ class Planner:
                 self.algorithm.plan()
                 self.clearModifiedMap()
             
-            self.path = self.parsePath(self.algorithm.path)
+            self.path = self.algorithm.path
 
     def setGoal(self, x, y,z):
         self.goal = (x, y,z)
@@ -178,14 +178,28 @@ class TaskAllocationManager:
         self.last_id = 0
         self.get_blockchain_records = ServiceProxy(f'{self.node_id}/get_records',GetBCRecords)
         self.submit_message = ServiceProxy(f'{self.node_id}/submit_message',SubmitTransaction)
+        self.target_discovery = Service(f'{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(self,data))
         self.get_blockchain_records.wait_for_service()
         self.submit_message.wait_for_service()
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationAction)
         self.planner = Planner(odom_topic,planningAlgorithm)
         self.update_interval = update_interval
         self.last_state = datetime.now()
+        self.path_publisher = rospy.Publisher(f'{self.node_id}/path',Path,queue_size=1)
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
     
+    def add_goal(self,data):
+        payload = {
+            'node_id':self.node_id,
+            'pos_x':data.x,
+            'pos_y':data.y,
+            'needed_uav':data.needed_uav,
+            'needed_ugv':data.needed_ugv
+        }
+        self.submit_message(SubmitTransaction(
+            table_name='targets',
+            data=payload
+        ))
     def update_position(self):
         odom = rospy.wait_for_message(self.odom_topic, Odometry)
         self.pos_x = odom.pose.pose.position.x
@@ -388,6 +402,9 @@ class TaskAllocationManager:
     def start_task(self,path):
         goal = NavigationActionGoal(points=self.format_path(path))
         self.navigation_client.send_goal(goal)
+
+    def visualize_path(self,path):
+        self.path_publisher.publish(self.planner.parsePath(path))
         
     def check_conflict(self,target_id):
         all_paths = self.paths[target_id].values()
@@ -560,6 +577,7 @@ class TaskAllocationManager:
 
         if len (conflicted_ids) == 0:
             #allocate robots to target
+            self.visualize_path(path)
             self.start_task(path)
             return
         
