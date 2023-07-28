@@ -7,7 +7,7 @@ from rospy import ServiceProxy
 from datetime import datetime
 import rospy
 import numpy as np
-from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal,NavigationActionFeedback
+from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal,NavigationActionFeedback,NavigationActionActionResult
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry,Path,OccupancyGrid
 from geometry_msgs.msg import PoseStamped,Point,Pose
@@ -182,7 +182,7 @@ class TaskAllocationManager:
         self.target_discovery = Service(f'{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(self,data))
         self.get_blockchain_records.wait_for_service()
         self.submit_message.wait_for_service()
-        self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationAction)
+        self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationActionAction)
         self.planner = Planner(odom_topic,planningAlgorithm)
         self.update_interval = update_interval
         self.last_state = datetime.now()
