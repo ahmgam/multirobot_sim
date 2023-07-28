@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal
 from rospy import ServiceProxy,Service
 import json
@@ -6,7 +7,7 @@ from rospy import ServiceProxy
 from datetime import datetime
 import rospy
 import numpy as np
-from multirobot_sim.action import NavigationAction,NavigationActionGoal
+from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal,NavigationActionFeedback
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry,Path,OccupancyGrid
 from geometry_msgs.msg import PoseStamped,Point,Pose
