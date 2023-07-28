@@ -9,7 +9,7 @@ import pygame
 from cv2 import resize,imread
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
-from multirobot_sim.srv import AddGoal
+from multirobot_sim.srv import AddGoal,AddGoalRequest
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5
 ROBOT_SIZE_UGV = 0.5
@@ -263,13 +263,11 @@ class PyMonitor:
   '''
   def publishGoal(self,robot):
     if robot["goal"] is not None:
-      rospy.ServiceProxy(f"{robot['name']}/add_target", AddGoal)(
-        AddGoal(
+      rospy.ServiceProxy(f"{robot['name']}/add_goal", AddGoal)(
           x=robot["goal"][0],
           y=robot["goal"][1],
           needed_uav=NEEDED_UAVS,
           needed_ugv=NEEDED_UGVS
-        )
       )
     
 

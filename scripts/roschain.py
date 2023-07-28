@@ -2433,12 +2433,10 @@ class RosChain:
         
         #define ros node
         self.node = rospy.init_node("roschain", anonymous=True)
-        rospy.logerr(os.getcwd())
-        print(os.getcwd())
         #define records service
-        self.get_record_service = rospy.Service(f'{self.node_id}/get_records',GetBCRecords,lambda req: self.get_records(self,**req))
+        self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(self,**req))
         #define submit message service
-        self.submit_message_service = rospy.Service(f'{self.node_id}/submit_message',SubmitTransaction,lambda req: self.submit_message(self,**req))
+        self.submit_message_service = rospy.Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,**req))
     
     @staticmethod           
     def submit_message(self,table_name,data):
