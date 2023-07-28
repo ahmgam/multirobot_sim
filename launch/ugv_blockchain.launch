@@ -5,13 +5,13 @@
     <arg name="x" default="0.0"/>
     <arg name="y" default="0.0"/>
     <arg name="z" default="0.0"/>
-    <arg name="node_type"/>
-    <arg name="rabbitmq_endpoint"/>
-    <arg name="rabbitmq_username"/>
-    <arg name="rabbitmq_password"/>
-    <arg name="rabbitmq_port"/>
-    <arg name="secret"/>
-    <arg name="base_directory"/>
+    <arg name="node_type" default="ugv"/>
+    <arg name="rabbitmq_endpoint" default="localhost"/>
+    <arg name="rabbitmq_username" default="admin"/>
+    <arg name="rabbitmq_password" default="passw123"/>
+    <arg name="rabbitmq_port" default="1883"/>
+    <arg name="base_directory" default="$(find multirobot_sim)/scripts"/>
+    <arg name="secret" default="abc123"/>
   <!--Robot namespace-->
   <group ns="$(arg robot_name)">
     <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
