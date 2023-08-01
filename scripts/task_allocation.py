@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal,GetBCRecordsRequest,SubmitTransactionRequest
 from rospy import ServiceProxy,Service
 import json
 from actionlib import SimpleActionClient,GoalStatus
@@ -8,6 +8,7 @@ from datetime import datetime
 import rospy
 import numpy as np
 from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal,NavigationActionFeedback,NavigationActionActionResult
+from std_msgs.msg import String
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry,Path,OccupancyGrid
 from geometry_msgs.msg import PoseStamped,Point,Pose
@@ -178,7 +179,7 @@ class TaskAllocationManager:
         self.idle= {self.node_id:True}
         self.waiting_message = None
         self.ongoing_task = None
-        self.last_id = 0
+        self.last_id = 1
         self.get_blockchain_records = ServiceProxy(f'get_records',GetBCRecords)
         self.get_blockchain_records.wait_for_service(timeout=25)
         print("Task_allocator: Initializing get_records service client")
@@ -249,8 +250,8 @@ class TaskAllocationManager:
 
     def sync_records(self):
         #get new records from blockchain service 
-        records = self.get_blockchain_records(GetBCRecords(last_trans_id=self.last_id))
-        for record in records:
+        records = self.get_blockchain_records(GetBCRecordsRequest(self.last_id))
+        for record in records.transactions:
             record = json.loads(record)
             self.process_record(record)
             
@@ -552,12 +553,12 @@ class TaskAllocationManager:
             'node_id':self.node_id,
             'node_type':self.node_type,
             'timecreated':datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'pos_x':self.targets[self.node_id]['pos_x'],
-            'pos_y':self.targets[self.node_id]['pos_y'],
+            'pos_x':self.pos_x,
+            'pos_y':self.pos_y,
             'details': ""
         }
         self.add_waiting_message(payload,'node_state')
-        msg = SubmitTransaction(table_name='node_state',message=json.dumps(payload))
+        msg = SubmitTransactionRequest('node_state',json.dumps(payload))
         self.submit_message(msg)
 
     def loop(self):

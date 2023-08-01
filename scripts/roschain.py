@@ -18,7 +18,7 @@ from string import digits, ascii_uppercase,ascii_lowercase
 from gazebo_msgs.srv import GetModelState
 from paho.mqtt import client as mqtt_client
 
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsRequest,GetBCRecordsResponse,SubmitTransactionResponse
 
 
 #################################
@@ -454,6 +454,7 @@ class Database (object):
             self.connection.executescript(f.read())
             
     def query(self, query, args=()):    
+        print(query,args)
         self.cursor.execute(query, args)
         self.connection.commit()        
         return self.cursor.lastrowid if query.startswith('INSERT') else  self.cursor.fetchall()
@@ -534,7 +535,8 @@ class Blockchain:
         return item_id
 
     def get_transaction(self,transaction_id):
-        transaction_data = self.db.select("blockchain",["*"],{"id":transaction_id})[0]
+        transaction_data = self.db.select("blockchain",["*"],("id",'==',transaction_id))
+        print(transaction_data)
         item_data = self.db.select(transaction_data["item_table"],["*"],{"id":transaction_data["item_id"]})[0]
         return transaction_data,item_data
     
@@ -2434,15 +2436,17 @@ class RosChain:
         #define ros node
         self.node = rospy.init_node("roschain", anonymous=True)
         #define records service
-        self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(self,**req))
+        self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(self,req))
         #define submit message service
-        self.submit_message_service = rospy.Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,**req))
+        self.submit_message_service = rospy.Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,req))
     
     @staticmethod           
-    def submit_message(self,table_name,data):
+    def submit_message(self,args):
         '''
         Send message to the given public key
         '''
+        table_name = args.table_name
+        data = args.message
         message = {
             "table_name":table_name,
             "data":data
@@ -2457,17 +2461,17 @@ class RosChain:
             "message":payload,
             "type":"consensus"   
         })
-        return True
+        return SubmitTransactionResponse("Success")
 
     @staticmethod
     def get_records(self,last_record):
         records = []
-        for id in range(last_record,self.blockchain.db.get_last_id("blockchain")+1):
+        for id in range(last_record.last_trans_id,self.blockchain.db.get_last_id("blockchain")+1):
             meta,data = self.blockchain.get_transaction(id)
             records.append(json.dumps({
                 f"{id}":{"meta":meta,"data":data}
             }))
-        return records
+        return GetBCRecordsResponse(records)
     def cron(self):
         for procedure in self.cron_procedures:
             procedure()

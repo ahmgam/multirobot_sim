@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   actionlib
   actionlib_msgs
+  #diagnostic_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -80,6 +81,7 @@ generate_messages(
    std_msgs  # Or other packages containing msgs
    geometry_msgs
    actionlib_msgs
+   #diagnostic_msgs
  )
 
 ################################################
