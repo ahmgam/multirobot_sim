@@ -1,4 +1,3 @@
 scripts/roschain/__pycache__/*.pyc
 scripts/__pycache__/*.pyc
-
-scripts/__pycache__/path_planning.cpython-38.pyc
+scripts/*.sqlite3

@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   actionlib
   actionlib_msgs
+  std_srvs
   #diagnostic_msgs
 )
 
@@ -81,6 +82,7 @@ generate_messages(
    std_msgs  # Or other packages containing msgs
    geometry_msgs
    actionlib_msgs
+   std_srvs
    #diagnostic_msgs
  )
 
@@ -115,7 +117,7 @@ generate_messages(
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   LIBRARIES mulirobot_sim
-  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime actionlib
+  CATKIN_DEPENDS roscpp rospy std_msgs message_runtime actionlib std_srvs
   DEPENDS system_lib
 )
 

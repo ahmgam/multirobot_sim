@@ -263,13 +263,13 @@ class PyMonitor:
   '''
   def publishGoal(self,robot):
     if robot["goal"] is not None:
-      rospy.ServiceProxy(f"{robot['name']}/add_goal", AddGoal)(
-          x=robot["goal"][0],
-          y=robot["goal"][1],
-          needed_uav=NEEDED_UAVS,
-          needed_ugv=NEEDED_UGVS
+      rospy.ServiceProxy(f"{robot['name']}/add_goal", AddGoal)(AddGoalRequest(
+      robot["goal"][0],
+      robot["goal"][1],
+      NEEDED_UAVS,
+      NEEDED_UGVS
       )
-    
+    )
 
   def watchForGoal(self,robot):
     if robot["goal"] is not None and self.inTolerance(*robot["loc"],*robot["goal"],TOLERANCE):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal,GetBCRecordsRequest,SubmitTransactionRequest
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal,GetBCRecordsRequest,SubmitTransactionRequest,AddGoalResponse
 from rospy import ServiceProxy,Service
 import json
 from actionlib import SimpleActionClient,GoalStatus
@@ -7,6 +7,7 @@ from rospy import ServiceProxy
 from datetime import datetime
 import rospy
 import numpy as np
+from std_srvs.srv import Trigger, TriggerResponse
 from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal,NavigationActionFeedback,NavigationActionActionResult
 from std_msgs.msg import String
 from geometry_msgs.msg import Point
@@ -165,10 +166,10 @@ class Planner:
 
 class TaskAllocationManager:
     def __init__(self,planningAlgorithm=None):
-        print("Task_allocator: Initializing")
+        rospy.loginfo("Task_allocator: Initializing")
         self.node = rospy.init_node('task_allocator', anonymous=True)
         self.node_id,self.node_type,self.odom_topic,self.update_interval = self.getParameters()
-        print("Task_allocator: Initializing parameters")
+        rospy.loginfo("Task_allocator: Initializing parameters")
         self.robots = {}
         self.targets = {}
         self.tasks = {}
@@ -182,35 +183,39 @@ class TaskAllocationManager:
         self.last_id = 1
         self.get_blockchain_records = ServiceProxy(f'get_records',GetBCRecords)
         self.get_blockchain_records.wait_for_service(timeout=25)
-        print("Task_allocator: Initializing get_records service client")
+        rospy.loginfo("Task_allocator: Initializing get_status service client")
+        self.chain_status = ServiceProxy(f'get_status',Trigger)
+        self.chain_status.wait_for_service(timeout=25)
+        rospy.loginfo("Task_allocator: Initializing get_records service client")
         self.submit_message = ServiceProxy(f'submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
-        print("Task_allocator: Initializing submit_message service client")
-        self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: lambda data: self.add_goal(self,**data))
-        print("Task_allocator: Initializing add_goal service")
+        rospy.loginfo("Task_allocator: Initializing submit_message service client")
+        self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
+        rospy.loginfo("Task_allocator: Initializing add_goal service")
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationActionAction)
-        print("Task_allocator: Initializing navigation action client")
+        
+        rospy.loginfo("Task_allocator: Initializing navigation action client")
         self.planner = Planner(self.odom_topic,planningAlgorithm)
         self.last_state = datetime.now()
         self.path_publisher = rospy.Publisher(f'/{self.node_id}/path',Path,queue_size=1)
-        print("Task_allocator: Initializing path publisher")
+        rospy.loginfo("Task_allocator: Initializing path publisher")
         
 
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
     
     def getParameters(self):
-        print("task_allocator: getting namespace")
+        rospy.loginfo("task_allocator: getting namespace")
         ns = rospy.get_namespace()
         try :
             node_id= rospy.get_param(f'/{ns}/task_allocator/node_id') # node_name/argsname
-            print("task_allocator:Getting node_id argument, and got : ", node_id)
+            rospy.loginfo(f"task_allocator:Getting node_id argument, and got : {node_id}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : node_id")
 
         try :
             node_type= rospy.get_param(f'/{ns}/task_allocator/node_type') # node_name/argsname
-            print("task_allocator:Getting node_type argument, and got : ", node_type)
+            rospy.loginfo(f"task_allocator:Getting node_type argument, and got : {node_type}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : node_type")
@@ -218,14 +223,14 @@ class TaskAllocationManager:
         
         try :
             odom_topic= rospy.get_param(f'/{ns}/task_allocator/odom_topic') # node_name/argsname
-            print("task_allocator:Getting odom_topic argument, and got : ", odom_topic)
+            rospy.loginfo(f"task_allocator:Getting odom_topic argument, and got : {odom_topic}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : odom_topic")
         
         try :
             update_interval= rospy.get_param(f'/{ns}/task_allocator/update_interval',UPDATE_INTERVAL) # node_name/argsname
-            print("task_allocator:Getting update_interval argument, and got : ", update_interval)
+            rospy.loginfo(f"task_allocator:Getting update_interval argument, and got : {update_interval}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : update_interval")
@@ -239,10 +244,11 @@ class TaskAllocationManager:
             'needed_uav':data.needed_uav,
             'needed_ugv':data.needed_ugv
         }
-        self.submit_message(SubmitTransaction(
-            table_name='targets',
-            data=payload
+        self.submit_message(SubmitTransactionRequest(
+            'targets',
+            json.dumps(payload)
         ))
+        return AddGoalResponse(True)
     def update_position(self):
         odom = rospy.wait_for_message(self.odom_topic, Odometry)
         self.pos_x = odom.pose.pose.position.x
@@ -564,6 +570,12 @@ class TaskAllocationManager:
     def loop(self):
         #update position
         self.update_position()
+        #wait until chain is ready
+        status = self.chain_status()
+        if status.success == False:
+            return
+        if status.message != 'CONNECTED':
+            return
         ##check if any message is waiting
         if not self.is_in_waiting():
             #check if time interval is reached since last state update

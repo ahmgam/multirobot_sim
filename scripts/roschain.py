@@ -7,6 +7,7 @@ import json
 from math import ceil
 from rospy import loginfo
 import datetime
+from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
 from queue import Queue
 import rospy
 import sqlite3
@@ -412,7 +413,7 @@ class Database (object):
             keywords=",".join([f"{key} = ?" for key in keyword]),
             options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
             )
-        rospy.loginfo(query)
+        #rospy.loginfo(query)
         #execute query
         return self.query(query,tuple([value for value in keyword.values()]+[condition[2] for condition in conditions]))
     
@@ -454,7 +455,6 @@ class Database (object):
             self.connection.executescript(f.read())
             
     def query(self, query, args=()):    
-        print(query,args)
         self.cursor.execute(query, args)
         self.connection.commit()        
         return self.cursor.lastrowid if query.startswith('INSERT') else  self.cursor.fetchall()
@@ -478,7 +478,7 @@ class Blockchain:
         #define parent
         self.parent = parent
         # define database manager
-        self.db = Database(f"{self.parent.base_directory}/db.sqlite3",f"{self.parent.base_directory}/schema.sql")
+        self.db = Database(f"{self.parent.base_directory}/{self.parent.node_id}.sqlite3",f"{self.parent.base_directory}/schema.sql")
         # create tables
         self.create_tables()
         # define queue for storing data
@@ -2028,11 +2028,11 @@ class SBFT:
             return
         #get view 
         view = self.views[view_id]
-        rospy.loginfo(view)
+        #rospy.loginfo(view)
         #get session
         session = self.parent.sessions.get_connection_session_by_node_id(msg['source'])
         #check if node_id is not the source
-        rospy.loginfo(session)
+        #rospy.loginfo(session)
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
                 rospy.loginfo("Node_id is the source")
@@ -2089,7 +2089,7 @@ class SBFT:
     def prepare_collect(self,msg):
         #handle prepare-collect message
         #check if view exists
-        rospy.loginfo(msg)
+        #rospy.loginfo(msg)
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
@@ -2160,7 +2160,7 @@ class SBFT:
     def commit(self,msg):
         #handle commit message
         #check if view exists
-        rospy.loginfo(msg)
+        #rospy.loginfo(msg)
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
@@ -2381,6 +2381,8 @@ class RosChain:
         '''
         Initialize network interface
         '''
+        #define is_initialized
+        self.ready = False
         #define debug mode
         self.DEBUG = DEBUG
         #define secret 
@@ -2439,12 +2441,28 @@ class RosChain:
         self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(self,req))
         #define submit message service
         self.submit_message_service = rospy.Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,req))
+        #define is_initialized service
+        self.get_status_service = rospy.Service(f'get_status',Trigger,lambda req: self.get_status(req))
+        #node is ready
+        self.ready = True
+
+    def get_status(self,args):
+
+        if len(self.sessions.get_active_nodes()) > 0:
+            tag = "CONNECTED"
+        else:
+            if self.ready:
+                tag = "READY"
+            else:
+                tag = "STARTING"
+        return TriggerResponse(self.ready,tag)
     
     @staticmethod           
     def submit_message(self,args):
         '''
         Send message to the given public key
         '''
+        rospy.loginfo(f"Task_allocator: {self.node_id} is sending message of type {args.table_name}")
         table_name = args.table_name
         data = args.message
         message = {
