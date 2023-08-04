@@ -258,15 +258,16 @@ class TaskAllocationManager:
         #get new records from blockchain service 
         records = self.get_blockchain_records(GetBCRecordsRequest(self.last_id))
         for record in records.transactions:
+            print(record)
             record = json.loads(record)
-            self.process_record(record)
+            self.process_record(list(record.values())[0])
             
     def process_record(self,record):
-        if record['meta']['table'] == 'states':
+        if record['meta']['item_table'] == 'states':
             self.robots[record['data']['node_id']] = record['data']
-        if record['meta']['table'] == 'targets':
+        if record['meta']['item_table'] == 'targets':
             self.targets[record['data']['node_id']] = record['data']
-        if record['meta']['table'] == 'task_records':
+        if record['meta']['item_table'] == 'task_records':
             data = record['data']
             if record['record_type'] == 'commit':
                 self.idle[data['node_id']] = False
@@ -280,7 +281,7 @@ class TaskAllocationManager:
             if self.is_task_completed(data['target_id']):
                 self.clear_task(data['target_id'])
 
-        if record['meta']['table'] == 'path':
+        if record['meta']['item_table'] == 'path':
             data = record['data']
             target_id = self.records[data['commit_id']]['target_id']
             if target_id in self.paths.keys():
@@ -289,7 +290,7 @@ class TaskAllocationManager:
                 self.paths[target_id] = {}
                 self.records[target_id][data['commit_id']] = data
         self.last_id = record['meta']['id']
-        if self.is_in_waiting(record['data'],record['meta']['table']):
+        if self.is_in_waiting(record['data'],record['meta']['item_table']):
                 self.waiting_message = None
 
     def is_task_fully_committed(self,task_id):

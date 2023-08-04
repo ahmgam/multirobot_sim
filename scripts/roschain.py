@@ -340,6 +340,10 @@ class Database (object):
         #execute query
         return self.query(query,tuple([keyword[1] for keyword in keywords]))
         
+    def flush(self):
+        for table_name in self.tabels.keys():
+            self.query(f"DROP TABLE IF EXISTS {table_name}")
+
     def select(self,table_name,fields,*conditions):
         
         #check if table exists
@@ -510,7 +514,24 @@ class Blockchain:
     #create the genesis transaction
     def genesis_transaction(self):
         #add genesis transaction to the blockchain containing 
-        pass
+        #get previous hash
+        prev_hash = self.__get_previous_hash()
+        #get current hash
+        current_hash = self.__get_current_hash(0,{})
+        #combine the hashes
+        combined_hash = self.__get_combined_hash(current_hash,prev_hash)
+        #check first if this record exists
+        trans,_ = self.get_transaction(1)
+        print(trans)
+        if trans:
+            #compare the combined hash
+            if combined_hash == trans["combined_hash"]:
+                return trans,None
+            else:
+                #flush the whole database
+                self.db.flush()
+        #add the transaction to the blockchain
+        self.db.insert("blockchain",("item_id",1),("item_table",'blockchain'),("current_hash",current_hash),("combined_hash",combined_hash))
     
     def add_sync_record(self,transaction_record,data_record):
         #add the transaction to the blockchain
@@ -536,8 +557,13 @@ class Blockchain:
 
     def get_transaction(self,transaction_id):
         transaction_data = self.db.select("blockchain",["*"],("id",'==',transaction_id))
-        print(transaction_data)
-        item_data = self.db.select(transaction_data["item_table"],["*"],{"id":transaction_data["item_id"]})[0]
+        if not transaction_data:
+            return None,None
+        else:
+            transaction_data = transaction_data[0]
+        item_data = self.db.select(transaction_data["item_table"],["*"],("id","==",transaction_data["item_id"]))
+        if item_data:
+            item_data = item_data[0]
         return transaction_data,item_data
     
     def get_record(self,table,record_id):
@@ -560,7 +586,7 @@ class Blockchain:
         
         if last_transaction_id is None:
             #add genesis transaction, get the hash of auth data
-            prev_hash = EncryptionModule.hash(self.parent.auth)
+            prev_hash = EncryptionModule.hash(json.dumps(self.parent.auth))
         else:
             #get the hash of last transaction
             prev_hash = self.db.select("blockchain",["combined_hash"],{"id":last_transaction_id})[0]["combined_hash"]
@@ -2619,10 +2645,10 @@ if __name__ == "__main__":
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : base_directory")
-    #auth = {
-    #    "username": rabbitmq_username,
-    #    "password":rabbitmq_password
-    #}
+    auth = {
+        "username": rabbitmq_username,
+        "password":rabbitmq_password
+    }
     auth = None
     
     node = RosChain(node_id,node_type,rabbitmq_endpoint,int(rabbitmq_port),secret,base_directory,auth,True)
