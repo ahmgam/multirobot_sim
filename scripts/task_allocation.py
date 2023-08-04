@@ -7,15 +7,13 @@ from rospy import ServiceProxy
 from datetime import datetime
 import rospy
 import numpy as np
-from std_srvs.srv import Trigger, TriggerResponse
-from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal,NavigationActionFeedback,NavigationActionActionResult
-from std_msgs.msg import String
+from std_srvs.srv import Trigger
+from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal
 from geometry_msgs.msg import Point
-from nav_msgs.msg import Odometry,Path,OccupancyGrid
-from geometry_msgs.msg import PoseStamped,Point,Pose
+from nav_msgs.msg import Odometry,Path
+from geometry_msgs.msg import PoseStamped,Point
 from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
-from os import getcwd
 
 #default value of state update interval
 UPDATE_INTERVAL = 3
@@ -193,14 +191,11 @@ class TaskAllocationManager:
         self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
         rospy.loginfo("Task_allocator: Initializing add_goal service")
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationActionAction)
-        
         rospy.loginfo("Task_allocator: Initializing navigation action client")
         self.planner = Planner(self.odom_topic,planningAlgorithm)
         self.last_state = datetime.now()
         self.path_publisher = rospy.Publisher(f'/{self.node_id}/path',Path,queue_size=1)
         rospy.loginfo("Task_allocator: Initializing path publisher")
-        
-
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
     
     def getParameters(self):
@@ -260,7 +255,8 @@ class TaskAllocationManager:
         for record in records.transactions:
             print(record)
             record = json.loads(record)
-            self.process_record(list(record.values())[0])
+            record = list(record.values())[0]
+            self.process_record(record)
             
     def process_record(self,record):
         if record['meta']['item_table'] == 'states':

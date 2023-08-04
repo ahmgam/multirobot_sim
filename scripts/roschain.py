@@ -7,7 +7,7 @@ import json
 from math import ceil
 from rospy import loginfo
 import datetime
-from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
+from std_srvs.srv import Trigger, TriggerResponse
 from queue import Queue
 import rospy
 import sqlite3
@@ -16,10 +16,8 @@ from collections import OrderedDict
 from time import mktime
 from random import choices
 from string import digits, ascii_uppercase,ascii_lowercase
-from gazebo_msgs.srv import GetModelState
 from paho.mqtt import client as mqtt_client
-
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsRequest,GetBCRecordsResponse,SubmitTransactionResponse
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse
 
 
 #################################
@@ -534,10 +532,21 @@ class Blockchain:
         self.db.insert("blockchain",("item_id",1),("item_table",'blockchain'),("current_hash",current_hash),("combined_hash",combined_hash))
     
     def add_sync_record(self,transaction_record,data_record):
-        #add the transaction to the blockchain
-        self.db.insert("blockchain",("item_id",transaction_record["id"]),("item_table",transaction_record["item_table"]),("current_hash",transaction_record["current_hash"]),("combined_hash",transaction_record["combined_hash"]))
-        #add the data to the blockchain
-        self.db.insert(transaction_record["item_table"],*[(key,value) for key,value in data_record.items()])
+        #get the transaction
+        meta,_ = self.get_transaction(transaction_record["id"])
+        #compare the combined hash
+        if not meta:
+            #add the transaction to the blockchain
+            self.db.insert("blockchain",("item_id",transaction_record["id"]),("item_table",transaction_record["item_table"]),("current_hash",transaction_record["current_hash"]),("combined_hash",transaction_record["combined_hash"]))
+            #add the data to the blockchain
+            self.db.insert(transaction_record["item_table"],*[(key,value) for key,value in data_record.items()])
+            return True
+        else:
+            #compare combined hashes
+            if meta["combined_hash"] == transaction_record["combined_hash"]:
+                return True
+            else:
+                return False
 
     #commit a new transaction to the blockchain
     def add_transaction(self,table,data):
@@ -2460,7 +2469,6 @@ class RosChain:
         self.cron_procedures.append(self.discovery.cron)
         self.cron_procedures.append(self.consensus.cron)
         self.cron_procedures.append(self.blockchain.cron)
-        
         #define ros node
         self.node = rospy.init_node("roschain", anonymous=True)
         #define records service
