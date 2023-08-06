@@ -288,6 +288,9 @@ class TaskAllocationManager:
         self.last_id = record['meta']['id']
         if self.is_in_waiting(record['data'],record['meta']['item_table']):
                 self.waiting_message = None
+        #update last id 
+        if self.last_id <= record['meta']['id']:
+            self.last_id = record['meta']['id'] + 1
 
     def is_task_fully_committed(self,task_id):
         #check all records in task
@@ -560,8 +563,8 @@ class TaskAllocationManager:
             'pos_y':self.pos_y,
             'details': ""
         }
-        self.add_waiting_message(payload,'node_state')
-        msg = SubmitTransactionRequest('node_state',json.dumps(payload))
+        self.add_waiting_message(payload,'states')
+        msg = SubmitTransactionRequest('states',json.dumps(payload))
         self.submit_message(msg)
 
     def loop(self):

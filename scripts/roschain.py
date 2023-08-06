@@ -456,10 +456,13 @@ class Database (object):
         with open(path) as f:
             self.connection.executescript(f.read())
             
-    def query(self, query, args=()):    
+    def query(self, query, args=(),update_meta = False):    
         self.cursor.execute(query, args)
-        self.connection.commit()        
-        return self.cursor.lastrowid if query.startswith('INSERT') else  self.cursor.fetchall()
+        self.connection.commit()  
+        ret = self.cursor.lastrowid if query.startswith('INSERT') else  self.cursor.fetchall()
+        if update_meta:
+            self.tabels = self.__get_db_meta()
+        return ret
     
     @staticmethod
     def dict_factory(cursor, row):
@@ -503,7 +506,7 @@ class Blockchain:
             current_hash TEXT NOT NULL,
             combined_hash TEXT NOT NULL
         );"""
-        self.db.query(def_query)
+        self.db.query(def_query,update_meta=True)
 
     ############################################################
     # blockchain operations
@@ -553,9 +556,9 @@ class Blockchain:
         last_transaction_id = self.db.get_last_id("blockchain")
         prev_hash = self.__get_previous_hash(last_transaction_id)
         #add the record to it's table
-        item_id = self.db.insert(table,data)
+        item_id = self.db.insert(table,*[(key,value) for key,value in data.items()])
         #get the inserted record
-        item = self.db.select(table,["*"],{"id":item_id})[0]
+        item = self.db.select(table,["*"],("id",'==',item_id))[0]
         #remove the hash from the record
         current_hash = self.__get_current_hash(last_transaction_id,item)
         #combine the hashes
@@ -598,7 +601,7 @@ class Blockchain:
             prev_hash = EncryptionModule.hash(json.dumps(self.parent.auth))
         else:
             #get the hash of last transaction
-            prev_hash = self.db.select("blockchain",["combined_hash"],{"id":last_transaction_id})[0]["combined_hash"]
+            prev_hash = self.db.select("blockchain",["combined_hash"],("id",'==',last_transaction_id))[0]["combined_hash"]
         return prev_hash
     
     def __get_current_hash(self,last_transaction_id,item):
@@ -648,9 +651,9 @@ class Blockchain:
         #TODO implement cron for view timeout
         #check views for timeout
         for view_id,view in self.views.copy().items():
-            if mktime(datetime.datetime.now().timetuple()) - view['last_updated'] > self.view_timeout and view['status'] == "pending":
+            if mktime(datetime.datetime.now().timetuple()) - view['last_updated'] > self.sync_timeout and view['status'] == "pending":
                 #evaluate the view
-                self.evaluate_view(view_id)
+                self.evaluate_sync_view(view_id)
                 if self.parent.DEBUG:
                     rospy.loginfo(f"View {view_id} timed out, starting evaluation")
               
@@ -677,8 +680,8 @@ class Blockchain:
     
         
     def get_sync_info(self):
- 
-        last_record = self.db.select("blockchain",["combined_hash"],("id",'==',self.db.get_last_id("blockchain")))
+        last_id = self.db.get_last_id("blockchain")
+        last_record = self.db.select("blockchain",["combined_hash"],("id",'==',last_id))
         if len(last_record) == 0:
             last_record = None
         else:
@@ -774,7 +777,7 @@ class Blockchain:
         if self.views[view_id]["status"] != "pending":
             return
         #check if the number of sync data is more than half of the nodes
-        if len(self.views[view_id]["sync_data"]) < len(self.parent.sessions.get_connection_sessions())/2:
+        if len(self.views[view_id]["sync_data"]) < len(self.parent.sessions.get_active_nodes())/2:
             rospy.loginfo("not enough sync data")
             #mark the view as incomplete
             self.views[view_id]["status"] = "incomplete"
@@ -2583,12 +2586,17 @@ class RosChain:
                 continue
             #check if there is any message in output queue
             output_buffer = self.queues.pop_output_queue()
+            
             if output_buffer:
-                try:
-                    self.blockchain.add_transaction(output_buffer["message"]["table"],output_buffer["message"]["data"])
-                except Exception as e:
-                    if self.DEBUG:
-                        rospy.loginfo(e)
+                print(f"output_buffer: {output_buffer}")
+                if type(output_buffer["message"]["data"]) == str:
+                    output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
+                self.blockchain.add_transaction(output_buffer["message"]["table_name"],output_buffer["message"]["data"])
+                #try:
+                    
+                #except Exception as e:
+                #    if self.DEBUG:
+                #        rospy.loginfo(e)
             #start cron
             self.cron()
                 
