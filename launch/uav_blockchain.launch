@@ -66,7 +66,7 @@
         <node pkg="multirobot_sim" type="task_allocation.py" name="task_allocator" output="screen" required="true">
             <param name="node_id" value="$(arg robot_name)"/>
             <param name="node_type" value="$(arg node_type)"/>
-            <param name="odom_topic" value="/$(arg robot_name)/odom"/>
+            <param name="odom_topic" value="/$(arg robot_name)/odometry_sensor1/odometry"/>
             <param name="update_interval" value="5"/>
         </node>  
     </group>

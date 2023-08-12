@@ -12,10 +12,14 @@
   <arg name="verbose" default="false"/>
   <arg name="uav_name_1" default="uav1"/>
   <arg name="uav_y_1" default="-3.0"/>
+  <arg name="uav_name_2" default="uav2"/>
+  <arg name="uav_y_2" default="-4.0"/>
   <arg name="elevation" default="1.0"/>
   <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
   <arg name="ugv_name_1" default="ugv1"/>
   <arg name="ugv_x_1" default="1.0"/>
+  <arg name="ugv_name_2" default="ugv2"/>
+  <arg name="ugv_x_2" default="2.0"/>
     <arg name="rabbitmq_endpoint" default="localhost"/>
     <arg name="rabbitmq_username" default="admin"/>
     <arg name="rabbitmq_password" default="passw123"/>
@@ -31,21 +35,9 @@
     <arg name="verbose" value="$(arg verbose)"/>
   </include>
 
-  <!-- Spawn robot 1-->
-  <include file="$(find multirobot_sim)/launch/uav_blockchain.launch">
-    <arg name="node_type" value="uav"/>
-    <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
-    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
-    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
-    <arg name="secret" value="$(arg secret)"/>
-    <arg name="base_directory" value="$(arg base_dir)"/>
-     <arg name="robot_name" value="$(arg uav_name_1)"/>
-    <arg name="mav_name" value="$(arg mav_name)"/>
-    <arg name="x" value="1.0"/>
-    <arg name="y" value="$(arg uav_y_1)"/>
-    <arg name="z" value="$(arg elevation)"/>
-  </include>
+  <!-- Map server -->
+  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
+  
   <!-- Spawn robot 2-->
   <include file="$(find multirobot_sim)/launch/ugv_blockchain.launch">
     <arg name="robot_name" value="$(arg ugv_name_1)"/>
@@ -60,11 +52,38 @@
     <arg name="base_directory" value="$(arg base_dir)"/>
   </include>
 
-    <!-- Map server -->
-  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
+  <!-- Spawn robot 1-->
+  <include file="$(find multirobot_sim)/launch/ugv_blockchain.launch">
+    <arg name="robot_name" value="$(arg ugv_name_2)"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x" value="$(arg ugv_x_2)"/>
+    <arg name="node_type" value="ugv"/>
+    <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
+    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
+    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+    <arg name="secret" value="$(arg secret)"/>
+    <arg name="base_directory" value="$(arg base_dir)"/>
+  </include>
+
+    <!-- Spawn robot 1-->
+  <include file="$(find multirobot_sim)/launch/uav_blockchain.launch">
+    <arg name="node_type" value="uav"/>
+    <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
+    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
+    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+    <arg name="secret" value="$(arg secret)"/>
+    <arg name="base_directory" value="$(arg base_dir)"/>
+     <arg name="robot_name" value="$(arg uav_name_1)"/>
+    <arg name="mav_name" value="$(arg mav_name)"/>
+    <arg name="x" value="1.0"/>
+    <arg name="y" value="$(arg uav_y_1)"/>
+    <arg name="z" value="$(arg elevation)"/>
+  </include>
   <!--Monitoring package-->
   <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="true">
-    <param name="robots" value="name:uav1,,type:uav|name:ugv1,,type:ugv"/>
+    <param name="robots" value="name:ugv1,,type:ugv|name:ugv2,,type:ugv|name:uav1,,type:uav"/>
     <param name="map" value="map"/>
     <param name="size" value="(600,600)"/>
   </node>

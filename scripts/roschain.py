@@ -18,6 +18,7 @@ from random import choices
 from string import digits, ascii_uppercase,ascii_lowercase
 from paho.mqtt import client as mqtt_client
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse
+from time import sleep
 
 
 #################################
@@ -175,6 +176,7 @@ class MQTTCommunicationModule:
         self.auth = auth
         self.DEBUG = DEBUG
         self.base_topic = "nodes"
+        self.log_topic = 'logs'
         self.buffer = Queue()
         self.__init_mqtt()
         self.counter = 0
@@ -221,6 +223,9 @@ class MQTTCommunicationModule:
             rospy.loginfo(f"Error sending message: {e}")
             return False
         
+    def send_log(self,message):
+        self.client.publish(f"{self.log_topic}", f"{datetime.datetime.now()}|{self.node_id}:{message}")
+
     def get(self):
         #self.client.loop()
         if self.is_available():
@@ -238,13 +243,14 @@ class MQTTCommunicationModule:
 
 class Database (object):
     def __init__(self, path, schema=None):
+        #self.working = False
         self.connection = sqlite3.connect(path, check_same_thread=False)
         self.connection.row_factory = Database.dict_factory
         if schema:
             with open(schema) as f:
                 self.connection.executescript(f.read())
-        self.cursor = self.connection.cursor()
         self.tabels = self.__get_db_meta()
+        
 
     def __get_db_meta(self):
         cols = self.query("""
@@ -336,7 +342,13 @@ class Database (object):
             values=",".join(["?" for i in range(len(keywords))])
             )
         #execute query
-        return self.query(query,tuple([keyword[1] for keyword in keywords]))
+        with self.connection:
+            cursor = self.connection.cursor()
+            cursor.execute(query, tuple([keyword[1] for keyword in keywords]))
+            #self.connection.commit()  
+            #ret = cursor.lastrowid 
+       
+        return 
         
     def flush(self):
         for table_name in self.tabels.keys():
@@ -367,7 +379,8 @@ class Database (object):
             options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
             )
         #execute query
-        return self.query(query,tuple([condition[2] for condition in conditions]))
+        final_conditions = tuple([condition[2] for condition in conditions])
+        return self.query(query,final_conditions)
     
     def delete(self,table_name,*conditions):
 
@@ -456,14 +469,21 @@ class Database (object):
         with open(path) as f:
             self.connection.executescript(f.read())
             
-    def query(self, query, args=(),update_meta = False):    
-        self.cursor.execute(query, args)
-        self.connection.commit()  
-        ret = self.cursor.lastrowid if query.startswith('INSERT') else  self.cursor.fetchall()
-        if update_meta:
-            self.tabels = self.__get_db_meta()
+    def query(self, query, args=(),insert=False):   
+     
+        self.working = True
+        with self.connection:
+            cursor = self.connection.cursor()
+            cursor.execute(query, args)
+            #self.connection.commit()  
+            if insert is True:
+                ret = cursor.lastrowid 
+            else:
+                ret = cursor.fetchall()
         return ret
     
+    def update_db_meta(self):
+        self.tabels = self.__get_db_meta()
     @staticmethod
     def dict_factory(cursor, row):
         d = {}
@@ -506,7 +526,8 @@ class Blockchain:
             current_hash TEXT NOT NULL,
             combined_hash TEXT NOT NULL
         );"""
-        self.db.query(def_query,update_meta=True)
+        self.db.query(def_query)
+        self.db.update_db_meta()
 
     ############################################################
     # blockchain operations
@@ -523,7 +544,6 @@ class Blockchain:
         combined_hash = self.__get_combined_hash(current_hash,prev_hash)
         #check first if this record exists
         trans,_ = self.get_transaction(1)
-        print(trans)
         if trans:
             #compare the combined hash
             if combined_hash == trans["combined_hash"]:
@@ -556,15 +576,18 @@ class Blockchain:
         last_transaction_id = self.db.get_last_id("blockchain")
         prev_hash = self.__get_previous_hash(last_transaction_id)
         #add the record to it's table
-        item_id = self.db.insert(table,*[(key,value) for key,value in data.items()])
+        self.db.insert(table,*[(key,value) for key,value in data.items()])
         #get the inserted record
-        item = self.db.select(table,["*"],("id",'==',item_id))[0]
+        item = self.db.select(table,["*"],*[(key,'==',value) for key,value in data.items()])[0]
+        item_id = item["id"]
         #remove the hash from the record
         current_hash = self.__get_current_hash(last_transaction_id,item)
         #combine the hashes
         combined_hash = self.__get_combined_hash(current_hash,prev_hash)
         #add the transaction to the blockchain
         self.db.insert("blockchain",("item_id",item_id),("item_table",table),("current_hash",current_hash),("combined_hash",combined_hash))
+        #sending log info 
+        self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
         return item_id
 
     def get_transaction(self,transaction_id):
@@ -732,7 +755,8 @@ class Blockchain:
             "operation":"sync_request",
             "last_record":last_record,
             "number_of_records":number_of_records,
-            "view_id":view_id
+            "view_id":view_id,
+            "source":self.parent.node_id
         }
         #send the sync request to other nodes
         self.parent.network.send_message('all',msg)
@@ -752,7 +776,8 @@ class Blockchain:
                 "last_record":last_record,
                 "number_of_records":number_of_records,
                 "sync_data":self.get_sync_data(last_record,number_of_records),
-                "view_id":view_id
+                "view_id":view_id,
+                "source":self.parent.node_id
             }
             self.parent.network.send_message(node_id,msg)
  
@@ -1076,6 +1101,7 @@ class DiscoveryProtocol:
         
     def cron(self):
         #check if disvoery last call is more than discovery interval
+        #rospy.loginfo(f"session time : {mktime(datetime.datetime.now().timetuple()) - self.last_call}")
         if mktime(datetime.datetime.now().timetuple()) - self.last_call > self.discovery_interval:
             #update last call
             self.last_call = mktime(datetime.datetime.now().timetuple())
@@ -1732,7 +1758,6 @@ class HeartbeatProtocol:
             session_time = mktime(datetime.datetime.now().timetuple()) - session["last_heartbeat"]
             if session_time > self.heartbeat_interval and session["status"] == "active":
                 #send heartbeat
-                rospy.loginfo("sending heartbeat from cron")
                 self.send_heartbeat(session)
                 #update last heartbeat time
                 self.parent.sessions.connection_sessions[session_id]["last_heartbeat"] = mktime(datetime.datetime.now().timetuple())
@@ -1750,7 +1775,6 @@ class HeartbeatProtocol:
             if self.parent.DEBUG:
                 rospy.loginfo(f"unknown message type {message.message['type']}")
                 
-    
     def send_heartbeat(self,session):
         
         #send heartbeat to session
@@ -1954,6 +1978,7 @@ class SBFT:
             self.commit_collect(msg)
         elif operation == 'sync_request':
             if self.parent.DEBUG:
+                print(msg)
                 rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting sync_request")
             self.parent.blockchain.handle_sync_request(msg)
         elif operation == 'sync_reply':
@@ -2419,6 +2444,8 @@ class RosChain:
         '''
         Initialize network interface
         '''
+        #define ros node
+        self.node = rospy.init_node("roschain", anonymous=True)
         #define is_initialized
         self.ready = False
         #define debug mode
@@ -2442,26 +2469,36 @@ class RosChain:
         #define base directory
         self.base_directory = base_directory
         #check if key pairs is available
+        rospy.loginfo("ROSChain:Checking if key pairs are available")
         self.pk, self.sk = EncryptionModule.load_keys(f'{self.base_directory}/{self.node_id}_pk.pem', f'{self.base_directory}/{self.node_id}_sk.pem')
         #if not, create new public and private key pair
         if self.pk == None:
+            rospy.loginfo("ROSChain:Key pairs are not available, creating new")
             self.pk, self.sk = EncryptionModule.generate_keys()
             EncryptionModule.store_keys(f'{self.node_id}_pk.pem', f'{self.node_id}_sk.pem',self.pk,self.sk)
         #define communication module
+        rospy.loginfo("ROSChain:Initializing communication module")
         self.comm = MQTTCommunicationModule(self.node_id,self.endpoint,self.port,self.auth,self.DEBUG)
         #define session manager
+        rospy.loginfo("ROSChain:Initializing session manager")
         self.sessions = SessionManager(self)
         #define queue
+        rospy.loginfo("ROSChain:Initializing queue manager")
         self.queues = QueueManager()
         #define network interface
+        rospy.loginfo("ROSChain:Initializing network interface")
         self.network = NetworkInterface(self)
         #define heartbeat protocol
+        rospy.loginfo("ROSChain:Initializing heartbeat protocol")
         self.heartbeat = HeartbeatProtocol(self)
         #define discovery protocol
+        rospy.loginfo("ROSChain:Initializing discovery protocol")
         self.discovery = DiscoveryProtocol(self)
         #define blockchain
+        rospy.loginfo("ROSChain:Initializing blockchain")
         self.blockchain = Blockchain(self)
         #define consensus protocol
+        rospy.loginfo("ROSChain:Initializing consensus protocol")
         self.consensus = SBFT(self)
         #cron interval
         self.cron_interval = 1
@@ -2472,13 +2509,14 @@ class RosChain:
         self.cron_procedures.append(self.discovery.cron)
         self.cron_procedures.append(self.consensus.cron)
         self.cron_procedures.append(self.blockchain.cron)
-        #define ros node
-        self.node = rospy.init_node("roschain", anonymous=True)
         #define records service
-        self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(self,req))
+        rospy.loginfo("ROSChain:Initializing records service")
+        self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(req))
         #define submit message service
+        rospy.loginfo("ROSChain:Initializing submit message service")
         self.submit_message_service = rospy.Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,req))
         #define is_initialized service
+        rospy.loginfo("ROSChain:Initializing is_initialized service")
         self.get_status_service = rospy.Service(f'get_status',Trigger,lambda req: self.get_status(req))
         #node is ready
         self.ready = True
@@ -2518,14 +2556,16 @@ class RosChain:
         })
         return SubmitTransactionResponse("Success")
 
-    @staticmethod
     def get_records(self,last_record):
         records = []
-        for id in range(last_record.last_trans_id,self.blockchain.db.get_last_id("blockchain")+1):
-            meta,data = self.blockchain.get_transaction(id)
-            records.append(json.dumps({
-                f"{id}":{"meta":meta,"data":data}
-            }))
+        try:
+            for id in range(last_record.last_trans_id,self.blockchain.db.get_last_id("blockchain")+1):
+                meta,data = self.blockchain.get_transaction(id)
+                records.append(json.dumps({
+                    f"{id}":{"meta":meta,"data":data}
+                }))
+        except:
+            records = []
         return GetBCRecordsResponse(records)
     def cron(self):
         for procedure in self.cron_procedures:
@@ -2539,66 +2579,56 @@ class RosChain:
         '''
         start listening for incoming connections
         '''
-        while True:
-            #update robot position
-            #check if there is any message in comm buffer
-            while self.comm.is_available():
-                comm_buffer =self.comm.get()
-                self.queues.put_queue(comm_buffer["message"],comm_buffer["type"])
-            #get message from queue
-            try:
-                message_buffer = self.queues.pop_queue()
-                
-                if message_buffer:
-                    #check message type
-                    if str(message_buffer["type"]) == "incoming":
-                        message =Message(message_buffer["message"])                         
-                        if message.message["node_id"]==self.node_id:
-                            continue
-                        elif str(message.message["type"]).startswith("discovery"):
-                            self.discovery.handle(message)
-                        elif str(message.message["type"]).startswith("heartbeat"):
-                            self.heartbeat.handle(message)
-                        elif message.message["type"]=="data_exchange":
-                            #for test purposes
-                            data = self.network.verify_data(message)
-                            if data:
-                                pass
-                                #self.network.server.logger.warning(f"Message from {data['node_id']} : {data['message']}")
-                                self.consensus.handle(data)
-                        else:
-                            if self.DEBUG:
-                                rospy.loginfo(f"unknown message type {message.message['type']}")
-                    elif str(message_buffer["type"]) == "outgoing":
-                        try:
-                            self.comm.send(message_buffer["message"])
-                        except Exception as e:
-                            if self.DEBUG:
-                                rospy.loginfo(e)
-                    elif str(message_buffer["type"]) == "consensus":
-                        self.consensus.send(message_buffer['message'])
-                    else:
-                        if self.DEBUG:
-                            rospy.loginfo(f'unknown message type {message_buffer["type"]}')
-            except Exception as e:
+        #update robot position
+        #check if there is any message in comm buffer
+        while self.comm.is_available():
+            comm_buffer =self.comm.get()
+            self.queues.put_queue(comm_buffer["message"],comm_buffer["type"])
+        #get message from queue
+        message_buffer = self.queues.pop_queue()
+        
+        if message_buffer:
+            #check message type
+            if str(message_buffer["type"]) == "incoming":
+                message =Message(message_buffer["message"])                         
+                if message.message["node_id"]==self.node_id:
+                    return
+                elif str(message.message["type"]).startswith("discovery"):
+                    self.discovery.handle(message)
+                elif str(message.message["type"]).startswith("heartbeat"):
+                    self.heartbeat.handle(message)
+                elif message.message["type"]=="data_exchange":
+                    #for test purposes
+                    data = self.network.verify_data(message)
+                    if data:
+                        pass
+                        #self.network.server.logger.warning(f"Message from {data['node_id']} : {data['message']}")
+                        self.consensus.handle(data)
+                else:
+                    if self.DEBUG:
+                        rospy.loginfo(f"unknown message type {message.message['type']}")
+            elif str(message_buffer["type"]) == "outgoing":
+                self.comm.send(message_buffer["message"])
+            elif str(message_buffer["type"]) == "consensus":
+                self.consensus.send(message_buffer['message'])
+            else:
                 if self.DEBUG:
-                    rospy.loginfo(f"error in handling message: {e}")
-                continue
-            #check if there is any message in output queue
-            output_buffer = self.queues.pop_output_queue()
-            
-            if output_buffer:
-                print(f"output_buffer: {output_buffer}")
-                if type(output_buffer["message"]["data"]) == str:
-                    output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
-                self.blockchain.add_transaction(output_buffer["message"]["table_name"],output_buffer["message"]["data"])
-                #try:
-                    
-                #except Exception as e:
-                #    if self.DEBUG:
-                #        rospy.loginfo(e)
-            #start cron
-            self.cron()
+                    rospy.loginfo(f'unknown message type {message_buffer["type"]}')
+    
+        #check if there is any message in output queue
+        output_buffer = self.queues.pop_output_queue()
+        
+        if output_buffer:
+            if type(output_buffer["message"]["data"]) == str:
+                output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
+            self.blockchain.add_transaction(output_buffer["message"]["table_name"],output_buffer["message"]["data"])
+            #try:
+                
+            #except Exception as e:
+            #    if self.DEBUG:
+            #        rospy.loginfo(e)
+        #start cron
+        self.cron()
                 
 #####################################
 # Main
@@ -2608,56 +2638,56 @@ if __name__ == "__main__":
     ns = rospy.get_namespace()
     try :
         node_id= rospy.get_param(f'{ns}/roschain/node_id') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting node_id argument, and got : ", node_id)
+        rospy.loginfo("ROSCHAIN: Getting node_id argument, and got : ", node_id)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : node_id")
 
     try :
         node_type= rospy.get_param(f'{ns}/roschain/node_type') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting node_type argument, and got : ", node_type)
+        rospy.loginfo("ROSCHAIN: Getting node_type argument, and got : ", node_type)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : node_type")
     
     try :
         rabbitmq_endpoint= rospy.get_param(f'{ns}/roschain/rabbitmq_endpoint') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting rabbitmq_endpoint argument, and got : ", rabbitmq_endpoint)
+        rospy.loginfo("ROSCHAIN: Getting rabbitmq_endpoint argument, and got : ", rabbitmq_endpoint)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : rabbitmq_endpoint")
     
     try :
         rabbitmq_username= rospy.get_param(f'{ns}/roschain/rabbitmq_username') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting rabbitmq_username argument, and got : ", rabbitmq_username)
+        rospy.loginfo("ROSCHAIN: Getting rabbitmq_username argument, and got : ", rabbitmq_username)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : rabbitmq_username")
     
     try :
         rabbitmq_password= rospy.get_param(f'{ns}/roschain/rabbitmq_endpoint') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting rabbitmq_password argument, and got : ", rabbitmq_password)
+        rospy.loginfo("ROSCHAIN: Getting rabbitmq_password argument, and got : ", rabbitmq_password)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : rabbitmq_password")
     
     try :
         rabbitmq_port= rospy.get_param(f'{ns}/roschain/rabbitmq_port') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting rabbitmq_port argument, and got : ", rabbitmq_port)
+        rospy.loginfo("ROSCHAIN: Getting rabbitmq_port argument, and got : ", rabbitmq_port)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : rabbitmq_port")
     
     try :
         secret= rospy.get_param(f'{ns}/roschain/secret') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting secret argument, and got : ", secret)
+        rospy.loginfo("ROSCHAIN: Getting secret argument, and got : ", secret)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : secret")
     
     try :
         base_directory= rospy.get_param(f'{ns}/roschain/base_directory') # node_name/argsname
-        rospy.loginfo("ROSCHAIN:Getting base_directory argument, and got : ", base_directory)
+        rospy.loginfo("ROSCHAIN: Getting base_directory argument, and got : ", base_directory)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : base_directory")

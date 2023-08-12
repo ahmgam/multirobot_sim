@@ -43,7 +43,7 @@ class Planner:
         return map
     
     def getOdomMsg(self):
-        odom = rospy.wait_for_message(self.odom_topic, Odometry)
+        odom = rospy.wait_for_message(self.odom_topic, Odometry, timeout=5.0)
         return odom
     def defineAlgorithm(self,algorithm):
         if algorithm is None:
@@ -253,7 +253,6 @@ class TaskAllocationManager:
         #get new records from blockchain service 
         records = self.get_blockchain_records(GetBCRecordsRequest(self.last_id))
         for record in records.transactions:
-            print(record)
             record = json.loads(record)
             record = list(record.values())[0]
             self.process_record(record)
@@ -555,6 +554,7 @@ class TaskAllocationManager:
             
     def submit_node_state(self):
         #submit node state to blockchain
+        print('submit node state')
         payload = {
             'node_id':self.node_id,
             'node_type':self.node_type,
@@ -656,6 +656,4 @@ if __name__ == "__main__":
     rospy.loginfo("task_allocator:Starting the task allocation node")
     robot = TaskAllocationManager()
     while not rospy.is_shutdown():
-        
         robot.loop()
-    rospy.spin()
