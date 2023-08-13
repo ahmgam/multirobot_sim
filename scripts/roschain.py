@@ -17,7 +17,7 @@ from time import mktime
 from random import choices
 from string import digits, ascii_uppercase,ascii_lowercase
 from paho.mqtt import client as mqtt_client
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponsefrom, DatabaseQuery, DatabaseQueryRequest
 from time import sleep
 
 
@@ -250,7 +250,7 @@ class Database (object):
             with open(schema) as f:
                 self.connection.executescript(f.read())
         self.tabels = self.__get_db_meta()
-        
+        self.query_client = rospy.ServiceProxy(f"{self.node_id}/query", DatabaseQuery)
 
     def __get_db_meta(self):
         cols = self.query("""
@@ -376,11 +376,10 @@ class Database (object):
         #build query
         query = "SELECT {fields} FROM {table} {options}".format(
             fields=",".join(fields),table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
-        #execute query
-        final_conditions = tuple([condition[2] for condition in conditions])
-        return self.query(query,final_conditions)
+     
+        return self.query(query)
     
     def delete(self,table_name,*conditions):
 
@@ -399,10 +398,10 @@ class Database (object):
         #build query
         query = "DELETE FROM {table} {options}".format(
             table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
         #execute query
-        return self.query(query,tuple([condition[2] for condition in conditions]))
+        return self.query(query)
     
     def update(self,table_name,*conditions,**keyword):
 
@@ -425,12 +424,12 @@ class Database (object):
         #build query
         query = "UPDATE {table} SET {keywords} {options}".format(
             table=table_name,
-            keywords=",".join([f"{key} = ?" for key in keyword]),
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            keywords=",".join([f"{key} = {value}" for key,value in keyword.items()]),
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
         #rospy.loginfo(query)
         #execute query
-        return self.query(query,tuple([value for value in keyword.values()]+[condition[2] for condition in conditions]))
+        return self.query(query)
     
     def count(self,table_name,*conditions):
         
@@ -451,10 +450,10 @@ class Database (object):
         #build query
         query = "SELECT COUNT(*) FROM {table} {options}".format(
             table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
         #execute query
-        return self.query(query,tuple([condition[2] for condition in conditions]))
+        return self.query(query)
  
     def get_last_id(self,table_name):
         #check if table exists
@@ -469,18 +468,18 @@ class Database (object):
         with open(path) as f:
             self.connection.executescript(f.read())
             
-    def query(self, query, args=(),insert=False):   
+    def query(self, query):   
      
-        self.working = True
-        with self.connection:
-            cursor = self.connection.cursor()
-            cursor.execute(query, args)
-            #self.connection.commit()  
-            if insert is True:
-                ret = cursor.lastrowid 
-            else:
-                ret = cursor.fetchall()
-        return ret
+        result = self.query_client(query)
+        data = []
+        if query.startswith("SELECT"):
+            data = []
+            for i in range(len(result.output)):
+                data.append(json.loads(result.output[i][1]))
+            return data
+        else:
+            return result.id
+        
     
     def update_db_meta(self):
         self.tabels = self.__get_db_meta()
