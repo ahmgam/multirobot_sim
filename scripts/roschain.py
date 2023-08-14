@@ -10,14 +10,13 @@ import datetime
 from std_srvs.srv import Trigger, TriggerResponse
 from queue import Queue
 import rospy
-import sqlite3
 import queue
 from collections import OrderedDict
 from time import mktime
 from random import choices
 from string import digits, ascii_uppercase,ascii_lowercase
 from paho.mqtt import client as mqtt_client
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponsefrom, DatabaseQuery, DatabaseQueryRequest
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse, DatabaseQuery, DatabaseQueryRequest
 from time import sleep
 
 
@@ -242,15 +241,13 @@ class MQTTCommunicationModule:
 ###################################
 
 class Database (object):
-    def __init__(self, path, schema=None):
+    def __init__(self,node_id):
         #self.working = False
-        self.connection = sqlite3.connect(path, check_same_thread=False)
-        self.connection.row_factory = Database.dict_factory
-        if schema:
-            with open(schema) as f:
-                self.connection.executescript(f.read())
-        self.tabels = self.__get_db_meta()
+        self.node_id = node_id
         self.query_client = rospy.ServiceProxy(f"{self.node_id}/query", DatabaseQuery)
+        self.query_client.wait_for_service()
+        self.tabels = self.__get_db_meta()
+        
 
     def __get_db_meta(self):
         cols = self.query("""
@@ -269,6 +266,7 @@ class Database (object):
         m.name, 
         p.cid
         """)
+        print(f"cols: {cols}")
         tabels = {table_name : {"name":table_name,"columns":{}} for table_name in set([col['table_name'] for col in cols])}
         # add columns to tabels
         for col in cols:
@@ -290,8 +288,6 @@ class Database (object):
                 else:
                     raise Exception("Column type not supported")
         return tabels
-    def __del__(self):
-        self.connection.close()
 
     def __table_exists(self,table_name):
         return table_name in self.tabels.keys()
@@ -339,14 +335,10 @@ class Database (object):
         #build query
         query = "INSERT INTO {table} ({keywords}) VALUES ({values})".format(
             table=table_name,keywords=",".join(keyword[0] for keyword in keywords),
-            values=",".join(["?" for i in range(len(keywords))])
-            )
+            values=",".join(keyword[1] for keyword in keywords))
+            
         #execute query
-        with self.connection:
-            cursor = self.connection.cursor()
-            cursor.execute(query, tuple([keyword[1] for keyword in keywords]))
-            #self.connection.commit()  
-            #ret = cursor.lastrowid 
+        self.query(query)
        
         return 
         
@@ -463,19 +455,16 @@ class Database (object):
         if not self.query(f"SELECT * FROM {table_name}"):
             return 0
         return self.query(f"SELECT MAX(id) FROM '{table_name}'")[0]['MAX(id)']
-    
-    def initialize(self, path):
-        with open(path) as f:
-            self.connection.executescript(f.read())
-            
+         
     def query(self, query):   
      
-        result = self.query_client(query)
+        result = self.query_client(DatabaseQueryRequest(query))
         data = []
-        if query.startswith("SELECT"):
+        if result.id == 0:
             data = []
+            print(f"output {result.output}")
             for i in range(len(result.output)):
-                data.append(json.loads(result.output[i][1]))
+                data.append(json.loads(str(result.output[i][1]), strict=False))
             return data
         else:
             return result.id
@@ -483,12 +472,6 @@ class Database (object):
     
     def update_db_meta(self):
         self.tabels = self.__get_db_meta()
-    @staticmethod
-    def dict_factory(cursor, row):
-        d = {}
-        for idx, col in enumerate(cursor.description):
-            d[col[0]] = row[idx]
-        return d
 
 #########################################
 # Blockchain module
@@ -502,7 +485,7 @@ class Blockchain:
         #define parent
         self.parent = parent
         # define database manager
-        self.db = Database(f"{self.parent.base_directory}/{self.parent.node_id}.sqlite3",f"{self.parent.base_directory}/schema.sql")
+        self.db = Database(self.parent.node_id)
         # create tables
         self.create_tables()
         # define queue for storing data

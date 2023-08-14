@@ -47,6 +47,7 @@
     <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
     <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
     <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+    <arg name="schema" value="$(arg base_dir)/schema.sql"/>
     <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
@@ -61,6 +62,7 @@
     <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
     <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
     <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
+    <arg name="schema" value="$(arg base_dir)/schema.sql"/>
     <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
@@ -75,6 +77,7 @@
     <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
+    <arg name="schema" value="$(arg base_dir)/schema.sql"/>
      <arg name="robot_name" value="$(arg uav_name_1)"/>
     <arg name="mav_name" value="$(arg mav_name)"/>
     <arg name="x" value="1.0"/>

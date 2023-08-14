@@ -12,6 +12,7 @@
     <arg name="rabbitmq_port"/>
     <arg name="secret"/>
     <arg name="base_directory"/>
+    <arg name="schema"/>
 
     <!-- env variables-->
     <env name="GAZEBO_MODEL_PATH" value="${GAZEBO_MODEL_PATH}:$(find rotors_gazebo)/models"/>
@@ -68,6 +69,11 @@
             <param name="node_type" value="$(arg node_type)"/>
             <param name="odom_topic" value="/$(arg robot_name)/odometry_sensor1/odometry"/>
             <param name="update_interval" value="5"/>
+        </node>  
+        <node pkg="multirobot_sim" type="database.py" name="database" output="screen" required="true">
+            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="db_dir" value="$(arg base_directory)"/>
+            <param name="schema" value="$(arg schema)"/>
         </node>  
     </group>
 </launch>

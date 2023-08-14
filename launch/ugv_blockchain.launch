@@ -12,6 +12,7 @@
     <arg name="rabbitmq_port" default="1883"/>
     <arg name="base_directory" default="$(find multirobot_sim)/scripts"/>
     <arg name="secret" default="abc123"/>
+    <arg name="schema"/>
   <!--Robot namespace-->
   <group ns="$(arg robot_name)">
     <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
@@ -50,6 +51,11 @@
         <param name="node_type" value="$(arg node_type)"/>
         <param name="odom_topic" value="/$(arg robot_name)/odom"/>
         <param name="update_interval" value="5"/>
+    </node>  
+    <node pkg="multirobot_sim" type="database.py" name="database" output="screen" required="true">
+            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="db_dir" value="$(arg base_directory)"/>
+            <param name="schema" value="$(arg schema)"/>
     </node>  
   </group>
 </launch>

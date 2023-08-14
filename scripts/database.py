@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 import sqlite3
 from multirobot_sim.srv import DatabaseQuery, DatabaseQueryResponse
 from queue import Queue
@@ -6,17 +6,25 @@ import random
 import string
 import rospy
 import json
+from time import sleep
 class Database (object):
-    def __init__(self, node_id,path):
+    def __init__(self, node_id,path,schema=None):
         #self.working = False
+        self.node = rospy.init_node("database", anonymous=True)
         self.node_id = node_id
-        self.connection = sqlite3.connect(path, check_same_thread=False)
+        self.connection = sqlite3.connect(f"{path}/{node_id}.sqlite3", check_same_thread=False)
         self.connection.row_factory = Database.dict_factory
         self.input_queue = Queue()
         self.output_queue = Queue()
         self.query_service = rospy.Service(f"{node_id}/query", DatabaseQuery, self.query_handler)
+        if schema:
+            with open(schema) as f:
+                self.connection.executescript(f.read())
         self.data = {}
 
+    def initialize(self, path):
+        with open(path) as f:
+            self.connection.executescript(f.read())
     def query(self, query, args=()):   
      
         self.working = True
@@ -34,9 +42,9 @@ class Database (object):
         op_id = self.generate_random_str()
         self.input_queue.put(op_id)
         self.data[op_id]= {"query":req.query,"result":None}
-        while not self.output_queue(op_id):
+        while not self.is_ready(op_id):
             pass
-        return DatabaseQueryResponse(self.data[op_id]["result"])
+        return DatabaseQueryResponse(*self.data[op_id]["result"])
     
     @staticmethod
     def dict_factory(cursor, row):
@@ -50,7 +58,7 @@ class Database (object):
         return ''.join(random.choice(string.ascii_letters) for _ in range(10))
     
     def is_ready(self,op_id):
-        if op_id in self.output_queue:
+        if op_id in self.output_queue.queue:
             return True
         return False
     
@@ -63,6 +71,7 @@ class Database (object):
             self.data[op_id]["result"] = self.query(query)
             #put output request 
             self.output_queue.put(op_id)
+            sleep(0.1)
         return
     
 if __name__ == "__main__":
@@ -81,6 +90,11 @@ if __name__ == "__main__":
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : db_dir")
     
-    database = Database(node_id,db_dir)
+    schema= rospy.get_param(f'{ns}/database/schema',None) # node_name/argsname
+    rospy.loginfo("Database: Getting shcema argument, and got : ", schema)
+
+    
+    
+    database = Database(node_id,db_dir,schema)
     while not rospy.is_shutdown():
         database.loop()
