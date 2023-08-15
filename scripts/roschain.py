@@ -335,7 +335,7 @@ class Database (object):
         #build query
         query = "INSERT INTO {table} ({keywords}) VALUES ({values})".format(
             table=table_name,keywords=",".join(keyword[0] for keyword in keywords),
-            values=",".join(keyword[1] for keyword in keywords))
+            values=",".join(str(keyword[1]) if type(keyword[1]) != str else f"'{keyword[1]}'" for keyword in keywords))
             
         #execute query
         self.query(query)
@@ -368,7 +368,7 @@ class Database (object):
         #build query
         query = "SELECT {fields} FROM {table} {options}".format(
             fields=",".join(fields),table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" if type(condition[2]) != str else f"{condition[0]} {condition[1]} '{condition[2]}'" for condition in conditions]) if len(conditions) > 0  else ""
             )
      
         return self.query(query)
@@ -464,7 +464,8 @@ class Database (object):
             data = []
             print(f"output {result.output}")
             for i in range(len(result.output)):
-                data.append(json.loads(str(result.output[i][1]), strict=False))
+                #parse json without raising exception
+                data.append(json.loads(result.output[i],strict=False))
             return data
         else:
             return result.id
@@ -746,7 +747,8 @@ class Blockchain:
     #handle sync request from other nodes
     def handle_sync_request(self,msg):
         #get last hash and number of records
-        node_id = msg["node_id"]
+        print(msg)
+        node_id = msg["message"]["node_id"]
         last_record = msg["message"]["data"]["last_record"]
         number_of_records = msg["message"]["data"]["number_of_records"]
         view_id = msg["message"]["data"]["view_id"]

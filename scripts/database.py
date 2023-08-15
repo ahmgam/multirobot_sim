@@ -22,20 +22,21 @@ class Database (object):
                 self.connection.executescript(f.read())
         self.data = {}
 
-    def initialize(self, path):
-        with open(path) as f:
-            self.connection.executescript(f.read())
     def query(self, query, args=()):   
      
         self.working = True
         with self.connection:
-            cursor = self.connection.cursor()
-            cursor.execute(query, args)
-            #self.connection.commit()  
-            if query.startswith('INSERT') is True or query.startswith('UPDATE') is True or query.startswith('DELETE') is True:
-                ret = cursor.lastrowid ,[]
-            else:
-                ret = 0,cursor.fetchall()
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(query, args)
+                #self.connection.commit()  
+                if query.startswith('INSERT') is True or query.startswith('UPDATE') is True or query.startswith('DELETE') is True:
+                    ret = cursor.lastrowid ,[]
+                else:
+                    ret = 0,cursor.fetchall()
+            except Exception as e:
+                rospy.loginfo(f"Error executing query, Query : {query} , Error : {e}")
+                ret = 0,[]
         return ret
     
     def query_handler(self,req):
