@@ -164,10 +164,10 @@ class Planner:
 
 class TaskAllocationManager:
     def __init__(self,planningAlgorithm=None):
-        rospy.loginfo("Task_allocator: Initializing")
-        self.node = rospy.init_node('task_allocator', anonymous=True)
         self.node_id,self.node_type,self.odom_topic,self.update_interval = self.getParameters()
-        rospy.loginfo("Task_allocator: Initializing parameters")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing")
+        self.node = rospy.init_node('task_allocator', anonymous=True)
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing parameters")
         self.robots = {}
         self.targets = {}
         self.tasks = {}
@@ -181,25 +181,25 @@ class TaskAllocationManager:
         self.last_id = 1
         self.get_blockchain_records = ServiceProxy(f'get_records',GetBCRecords)
         self.get_blockchain_records.wait_for_service(timeout=25)
-        rospy.loginfo("Task_allocator: Initializing get_status service client")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing get_status service client")
         self.chain_status = ServiceProxy(f'get_status',Trigger)
         self.chain_status.wait_for_service(timeout=25)
-        rospy.loginfo("Task_allocator: Initializing get_records service client")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing get_records service client")
         self.submit_message = ServiceProxy(f'submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
-        rospy.loginfo("Task_allocator: Initializing submit_message service client")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing submit_message service client")
         self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
-        rospy.loginfo("Task_allocator: Initializing add_goal service")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing add_goal service")
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationActionAction)
-        rospy.loginfo("Task_allocator: Initializing navigation action client")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing navigation action client")
         self.planner = Planner(self.odom_topic,planningAlgorithm)
         self.last_state = datetime.now()
         self.path_publisher = rospy.Publisher(f'/{self.node_id}/path',Path,queue_size=1)
-        rospy.loginfo("Task_allocator: Initializing path publisher")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing path publisher")
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
     
     def getParameters(self):
-        rospy.loginfo("task_allocator: getting namespace")
+        rospy.loginfo(f"task_allocator: getting namespace")
         ns = rospy.get_namespace()
         try :
             node_id= rospy.get_param(f'/{ns}/task_allocator/node_id') # node_name/argsname
@@ -237,7 +237,8 @@ class TaskAllocationManager:
             'pos_x':data.x,
             'pos_y':data.y,
             'needed_uav':data.needed_uav,
-            'needed_ugv':data.needed_ugv
+            'needed_ugv':data.needed_ugv,
+            'timecreated':datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         self.submit_message(SubmitTransactionRequest(
             'targets',

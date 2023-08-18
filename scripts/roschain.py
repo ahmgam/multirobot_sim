@@ -192,7 +192,7 @@ class MQTTCommunicationModule:
             self.client.subscribe(f"{self.base_topic}/{self.node_id}")
             self.client.subscribe(f"{self.base_topic}")
         except Exception as e:
-            rospy.loginfo(f"Error connecting to MQTT: {e}")
+            rospy.loginfo(f"{node_id}: Error connecting to MQTT: {e}")
             return
 
     def on_message(self, client, userdata, message):
@@ -205,7 +205,7 @@ class MQTTCommunicationModule:
         
     def send(self, message):
         if self.DEBUG:
-            rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
+            rospy.loginfo(f'{self.node_id}: {datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
         #parse message to string
         if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
           message["message"] = json.dumps(message["message"])
@@ -219,11 +219,11 @@ class MQTTCommunicationModule:
             self.counter += 1
             return True
         except Exception as e:
-            rospy.loginfo(f"Error sending message: {e}")
+            rospy.loginfo(f"{self.node_id}: Error sending message: {e}")
             return False
         
     def send_log(self,message):
-        self.client.publish(f"{self.log_topic}", f"{datetime.datetime.now()}|{self.node_id}:{message}")
+        self.client.publish(f"{self.log_topic}", f"{self.node_id}|{message}")
 
     def get(self):
         #self.client.loop()
@@ -266,7 +266,6 @@ class Database (object):
         m.name, 
         p.cid
         """)
-        print(f"cols: {cols}")
         tabels = {table_name : {"name":table_name,"columns":{}} for table_name in set([col['table_name'] for col in cols])}
         # add columns to tabels
         for col in cols:
@@ -462,7 +461,6 @@ class Database (object):
         data = []
         if result.id == 0:
             data = []
-            print(f"output {result.output}")
             for i in range(len(result.output)):
                 #parse json without raising exception
                 data.append(json.loads(result.output[i],strict=False))
@@ -661,7 +659,7 @@ class Blockchain:
                 #evaluate the view
                 self.evaluate_sync_view(view_id)
                 if self.parent.DEBUG:
-                    rospy.loginfo(f"View {view_id} timed out, starting evaluation")
+                    rospy.loginfo(f"{self.parent.node_id}: View {view_id} timed out, starting evaluation")
               
     def check_sync(self,last_conbined_hash, record_count):
         #check if all input is not null 
@@ -747,11 +745,10 @@ class Blockchain:
     #handle sync request from other nodes
     def handle_sync_request(self,msg):
         #get last hash and number of records
-        print(msg)
-        node_id = msg["message"]["node_id"]
-        last_record = msg["message"]["data"]["last_record"]
-        number_of_records = msg["message"]["data"]["number_of_records"]
-        view_id = msg["message"]["data"]["view_id"]
+        node_id = msg["source"]
+        last_record = msg["last_record"]
+        number_of_records = msg["number_of_records"]
+        view_id = msg["view_id"]
         #check if the blockchain is in sync
         if self.check_sync(last_record,number_of_records):
             #if it is, then send a sync reply
@@ -775,19 +772,21 @@ class Blockchain:
             if len(self.views[view_id]["sync_data"]) == len(self.parent.sessions.get_connection_sessions()):
                 self.evaluate_sync_view(view_id)
         else:
-            rospy.loginfo("view does not exist")
+            rospy.loginfo(f"{self.parent.node_id}: view does not exist")
 
     def evaluate_sync_view(self,view_id):
         #check if the view exists
         if view_id not in self.views.keys():
-            rospy.loginfo("view does not exist")
+            rospy.loginfo(f"{self.parent.node_id}: view does not exist")
             return
         #check if the view is complete
         if self.views[view_id]["status"] != "pending":
             return
         #check if the number of sync data is more than half of the nodes
-        if len(self.views[view_id]["sync_data"]) < len(self.parent.sessions.get_active_nodes())/2:
-            rospy.loginfo("not enough sync data")
+        print(f"number of sync data : {len(self.views[view_id]['sync_data'])}")
+        print(f"number of nodes : {len(self.parent.sessions.get_active_nodes())}")
+        if len(self.views[view_id]["sync_data"]) < len(self.parent.sessions.get_active_nodes())//2:
+            rospy.loginfo(f"{self.parent.node_id}: not enough sync data")
             #mark the view as incomplete
             self.views[view_id]["status"] = "incomplete"
             return
@@ -809,7 +808,7 @@ class Blockchain:
             if all(v == value for v in sync_records[id]):
                 self.add_sync_record(value[0],value[1])
             else:
-                rospy.loginfo("sync data is not the same")
+                rospy.loginfo(f"{self.parent.node_id}: the sync data is not the same")
                 return
         #change the status of the view
         self.views[view_id]["status"] = "complete"
@@ -906,25 +905,31 @@ class ApprovalResponseMessage(Message):
 class QueueManager:
     
     def __init__(self):
-        self.queue = queue.Queue()
+        self.queue = []
         self.output_queue = queue.Queue()
         
     def put_queue(self, message,msg_type,on_failure=None):
         
         #add message to queue
-        self.queue.put({
+        self.queue.append({
             "message": message,
+            "time": mktime(datetime.datetime.now().timetuple()) if message.get("time",None) is None else message["time"],
             "type": msg_type,
             "on_failure": on_failure
         })
+     
+        try:
+            self.queue.sort(key=lambda x: x['time'])
+        except KeyError as e:
+            print(self.queue)
+            exit()
                  
     def pop_queue(self):
         #get message from send queue
-        if self.queue.empty():
+        if len(self.queue) == 0:
             return None
         else:
-            data = self.queue.get()
-            self.queue.task_done()
+            data = self.queue.pop(0)
             return data
     
     def put_output_queue(self, message,msg_source,msg_type):
@@ -1096,30 +1101,30 @@ class DiscoveryProtocol:
     def handle(self,message):
         if message.message["type"] == "discovery_request":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting response_to_discovery")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting response_to_discovery")
             self.respond_to_discovery(message)
         elif message.message["type"] == "discovery_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery")
             self.verify_discovery(message)
         elif message.message["type"] == "discovery_verification":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery_response")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery_response")
             self.verify_discovery_response(message)
         elif message.message["type"] == "discovery_verification_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery")
             self.approve_discovery(message)
         elif message.message["type"] == "discovery_approval":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery_response")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery_response")
             self.approve_discovery_response(message)
         elif message.message["type"] == "discovery_approval_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting finalize_discovery")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting finalize_discovery")
             self.finalize_discovery(message)
         else:
-            rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, but no handler found")
+            rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, but no handler found")
     ################################
     # Challenge management
     ################################   
@@ -1145,6 +1150,7 @@ class DiscoveryProtocol:
             "pos": self.parent.pos,
             "type": "discovery_request",
             "port": self.parent.port,
+            "time":mktime(datetime.datetime.now().timetuple()),
             "session_id": "",
             "message":{
             "timestamp": str(datetime.datetime.now()),
@@ -1163,8 +1169,9 @@ class DiscoveryProtocol:
         #create message object
         message = DiscoveryMessage(payload)
         self.parent.queues.put_queue({"target": "all",
-                "message": message.message,
-                "pos": self.parent.pos}, "outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": message.message,
+                                      "pos": self.parent.pos}, "outgoing")
         
     def respond_to_discovery(self,message):
         #respond to discovery requests and send challenge
@@ -1173,7 +1180,7 @@ class DiscoveryProtocol:
             message = DiscoveryMessage(message.message) 
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"validation error {e}")
+                rospy.loginfo(f"{self.parent.node_id}: validation error {e}")
             return None
         #verify the message hash 
         buff = message.message
@@ -1184,17 +1191,17 @@ class DiscoveryProtocol:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(msg_pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active") 
+                rospy.loginfo(f"{self.parent.node_id}: connection session is already active") 
             return None
         #check if the node has active discovery session with the sender
         if self.parent.sessions.get_discovery_session(message.message["node_id"]):
             if self.parent.DEBUG:    
-                rospy.loginfo("discovery session is already active")
+                rospy.loginfo(f"{self.parent.node_id}: discovery session is already active")
             return None
         else:
             #create new session
@@ -1222,6 +1229,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_response",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -1234,15 +1242,16 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos}, "outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos}, "outgoing")
     
     def verify_discovery(self,message):
         #verify discovery request and send challenge response
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:    
-                rospy.loginfo("connection session is already active")
+                rospy.loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #verify the message hash 
         buff = message.message
@@ -1255,7 +1264,7 @@ class DiscoveryProtocol:
             decrypted_data = json.loads(decrypted_data)
         except Exception as e:
             if self.parent.DEBUG:    
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #validate the message
         message.message["message"] = decrypted_data
@@ -1263,12 +1272,12 @@ class DiscoveryProtocol:
             message=DiscoveryResponseMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(decrypted_data["data"]["pk"])) == False:
             if self.parent.DEBUG:    
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         try:
             #generate challenge random string
@@ -1277,7 +1286,7 @@ class DiscoveryProtocol:
             client_sol, server_sol = self.solve_challenge(challenge)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error generating challenge : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error generating challenge : {e}")
             return None
         #create discovery session
         session_data = {
@@ -1309,6 +1318,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_verification",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -1321,21 +1331,22 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
  
     def verify_discovery_response(self,message):
         #verify discovery response and add node to the network
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active")
+                rospy.loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                rospy.loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         
         #verify the message hash 
@@ -1348,7 +1359,7 @@ class DiscoveryProtocol:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #decrypt the message
         try:
@@ -1356,7 +1367,7 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         
         #parse the message
@@ -1364,7 +1375,7 @@ class DiscoveryProtocol:
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                rospy.loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -1373,7 +1384,7 @@ class DiscoveryProtocol:
             message=VerificationMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         
         #get the challenge from the incoming message
@@ -1383,7 +1394,7 @@ class DiscoveryProtocol:
         #compare the client challenge response
         if decrypted_data["data"]["client_challenge_response"] != client_sol:
             if self.parent.DEBUG:
-                rospy.loginfo("client challenge response not verified")
+                rospy.loginfo(f"{self.parent.node_id}: client challenge response not verified")
             return None
         #update discovery session
         session_data = {
@@ -1416,6 +1427,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_verification_response",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -1428,21 +1440,22 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
 
     def approve_discovery(self,message):
         #approve discovery request and send approval response
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active")
+                rospy.loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                rospy.loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         #get the public key of the sender from the session
         pk = session["pk"]
@@ -1457,19 +1470,19 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #parse the message
         decrypted_data = json.loads(decrypted_data)
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                rospy.loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -1478,12 +1491,12 @@ class DiscoveryProtocol:
             message=VerificationResponseMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         #compare the client challenge response
         if decrypted_data["data"]["server_challenge_response"] != session["server_challenge_response"]:
             if self.parent.DEBUG:
-                rospy.loginfo("client challenge response not verified")
+                rospy.loginfo(f"{self.parent.node_id}: client challenge response not verified")
             return None
         
         #creating new session with symmetric key and session id
@@ -1526,6 +1539,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_approval",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -1538,21 +1552,22 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
             
     def approve_discovery_response(self,message):
         #approve discovery response and add node to the network
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active")
+                rospy.loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                rospy.loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         #get the public key of the sender from the session
         pk = session["pk"]
@@ -1567,19 +1582,19 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #parse the message
         decrypted_data = json.loads(decrypted_data)
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                rospy.loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -1588,7 +1603,7 @@ class DiscoveryProtocol:
             message=ApprovalMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         
         #first generate symmetric key
@@ -1600,11 +1615,11 @@ class DiscoveryProtocol:
             decrypted_test = EncryptionModule.decrypt_symmetric(decrypted_data["data"]["test_message"],key)
             if decrypted_test != "client_test":
                 if self.parent.DEBUG:
-                    rospy.loginfo("test message not decrypted")
+                    rospy.loginfo(f"{self.parent.node_id}: test message not decrypted")
                 return None
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting test message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting test message : {e}")
             return None
         #create new session
         session_data = {
@@ -1640,6 +1655,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_approval",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -1652,8 +1668,9 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
 
     def finalize_discovery(self,message):
         #approve discovery response and add node to the network
@@ -1661,7 +1678,7 @@ class DiscoveryProtocol:
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                rospy.loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         #verify the message hash 
         buff = message.message
@@ -1676,19 +1693,19 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #parse the message
         decrypted_data = json.loads(decrypted_data)
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                rospy.loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -1697,7 +1714,7 @@ class DiscoveryProtocol:
             message=ApprovalResponseMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         
         
@@ -1706,11 +1723,11 @@ class DiscoveryProtocol:
             decrypted_test = EncryptionModule.decrypt_symmetric(decrypted_data["data"]["test_message"],session["key"])
             if decrypted_test != "server_test":
                 if self.parent.DEBUG:
-                    rospy.loginfo("test message not decrypted")
+                    rospy.loginfo(f"{self.parent.node_id}: test message not decrypted")
                 return None
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting test message : {e}")
+                rospy.loginfo(f"{self.parent.node_id}: error decrypting test message : {e}")
             return None
         
         #get the session id
@@ -1749,15 +1766,15 @@ class HeartbeatProtocol:
         
         if message.message["type"] == "heartbeat_request":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat")
             self.handle_heartbeat(message)
         elif message.message["type"] == "heartbeat_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat_response")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat_response")
             self.handle_heartbeat_response(message)
         else:
             if self.parent.DEBUG:
-                rospy.loginfo(f"unknown message type {message.message['type']}")
+                rospy.loginfo(f"{self.parent.node_id}: unknown message type {message.message['type']}")
                 
     def send_heartbeat(self,session):
         
@@ -1780,6 +1797,7 @@ class HeartbeatProtocol:
             "node_type": self.parent.node_type,
             "port": self.parent.port,
             "type": "heartbeat_request",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "pos": self.parent.pos,
             "message":encrypted_msg
             })
@@ -1791,8 +1809,9 @@ class HeartbeatProtocol:
         payload["signature"] = msg_signature
         #send message
         self.parent.queues.put_queue({"target": session["node_id"],
-                        "message": payload,
-                        "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
            
     def handle_heartbeat(self,message):
         #receive heartbeat from node
@@ -1800,7 +1819,7 @@ class HeartbeatProtocol:
         session = self.parent.sessions.get_connection_sessions(message.message["session_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid session")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid session")
             return
         #get message hash and signature
         buff = message.message.copy()
@@ -1810,21 +1829,21 @@ class HeartbeatProtocol:
         #verify message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid signature")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid signature")
             return
         #decrypt message
         try:
             decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
         except:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid key")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid key")
             return
         #validate message
         message.message["message"] = json.loads(decrypted_msg)
         #check counter
         if message.message["message"]["counter"]<=session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid counter")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
             return
         #update node state table
         #self.parent.server.logger.warning(f'table request : {json.dumps(message.message["message"]["data"])}' )
@@ -1832,7 +1851,7 @@ class HeartbeatProtocol:
         #chcek blockchain status
         if self.parent.blockchain.check_sync(*message.message["message"]["blockchain_status"]) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Un synced blockchain, sending sync request")
+                rospy.loginfo(f"{self.parent.node_id}: Un synced blockchain, sending sync request")
             self.parent.blockchain.send_sync_request()
             
         #prepare message 
@@ -1854,6 +1873,7 @@ class HeartbeatProtocol:
             "node_type":self.parent.node_type,
             "port": self.parent.port,
             "type": "heartbeat_response",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "pos": self.parent.pos,
             "message":encrypted_msg
             })
@@ -1865,8 +1885,9 @@ class HeartbeatProtocol:
         payload["signature"] = msg_signature
         #send message
         self.parent.queues.put_queue({"target": session["node_id"],
-                        "message": payload,
-                        "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
  
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node
@@ -1874,7 +1895,7 @@ class HeartbeatProtocol:
         session = self.parent.sessions.get_connection_sessions(message.message["session_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid session")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid session")
             return
         
         #get message hash and signature
@@ -1885,22 +1906,22 @@ class HeartbeatProtocol:
         #verify message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid signature")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid signature")
             return
         #decrypt message
         try:
             decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
         except:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid key")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid key")
             return
         #validate message
         message.message["message"] = json.loads(decrypted_msg)
         #self.parent.server.logger.warning(f'table response : {json.dumps(message.message["message"]["data"])}' )
         #check counter
-        if message.message["message"]["counter"]<session["counter"]:
+        if message.message["message"]["counter"]<=session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid counter")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
             return
         #update node state table
         self.parent.sessions.update_node_state_table(message.message["message"]["data"])
@@ -1911,7 +1932,7 @@ class HeartbeatProtocol:
         #chcek blockchain status
         if self.parent.blockchain.check_sync(*message.message["message"]["blockchain_status"]) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Un synced blockchain, sending sync request")
+                rospy.loginfo(f"{self.parent.node_id}: Un synced blockchain, sending sync request")
             self.parent.blockchain.send_sync_request()    
 
 #######################################
@@ -1933,7 +1954,7 @@ class SBFT:
         for view_id,view in self.views.copy().items():
             if mktime(datetime.datetime.now().timetuple()) - view['last_updated'] > self.view_timeout:
                 if self.parent.DEBUG:
-                    rospy.loginfo(f"View {view_id} timed out")
+                    rospy.loginfo(f"{self.parent.node_id}: View {view_id} timed out")
                 self.views.pop(view_id)
         
     def handle(self, msg):
@@ -1942,43 +1963,42 @@ class SBFT:
         operation = msg['operation']
         if operation == 'pre-prepare':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting pre-prepare")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting pre-prepare")
             self.pre_prepare(msg)
         elif operation == 'prepare':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting prepare")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting prepare")
             self.prepare(msg)
         elif operation == 'prepare-collect':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting prepare-collect")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting prepare-collect")
             self.prepare_collect(msg)
         elif operation == 'commit':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting commit")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting commit")
             self.commit(msg)
         elif operation == 'commit-collect':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting commit-collect")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting commit-collect")
             self.commit_collect(msg)
         elif operation == 'sync_request':
             if self.parent.DEBUG:
-                print(msg)
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting sync_request")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting sync_request")
             self.parent.blockchain.handle_sync_request(msg)
         elif operation == 'sync_reply':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting sync_response")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting sync_response")
             self.parent.blockchain.handle_sync_reply(msg)
         else:
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['message']['node_id']} of type {msg['message']['type']}, but no handler found")
+                rospy.loginfo(f"{self.parent.node_id}: Received message from {msg['message']['node_id']} of type {msg['message']['type']}, but no handler found")
             pass
     
     def send(self,msg):
         #check message type 
         if not type(msg['message']) in [dict,str]:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid message type")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid message type")
             return
         #create view number 
         view_id = self.generate_view_id()
@@ -2017,7 +2037,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is already created")
+                rospy.loginfo(f"{self.parent.node_id}: View is already created")
             return
         #get the session 
         session = self.parent.sessions.get_connection_session_by_node_id(msg['source'])
@@ -2028,12 +2048,12 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #compare node state table
         if not self.parent.sessions.compare_node_state_table(msg['node_ids']):
             if self.parent.DEBUG:
-                rospy.loginfo("Node state table not equal")
+                rospy.loginfo(f"{self.parent.node_id}: Node state table not equal")
             return None
         #message payload
         payload = {
@@ -2071,7 +2091,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                rospy.loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -2082,7 +2102,7 @@ class SBFT:
         #rospy.loginfo(session)
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                rospy.loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -2092,12 +2112,12 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check hash of message
         if msg_hash != view["hash"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Hash of message does not match")
+                rospy.loginfo(f"{self.parent.node_id}: Hash of message does not match")
             return None
         msg["signature"] = msg_signature
         msg["hash"] = msg_hash
@@ -2140,7 +2160,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                rospy.loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -2149,7 +2169,7 @@ class SBFT:
         #check if node_id is not the source
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                rospy.loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -2158,12 +2178,12 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check hash of message
         if msg["hash"] != view["hash"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Hash of message does not match")
+                rospy.loginfo(f"{self.parent.node_id}: Hash of message does not match")
             return None
         #compare node state table
         #if not self.parent.sessions.compare_node_state_table(msg['node_ids']):
@@ -2179,12 +2199,12 @@ class SBFT:
             #verify the message signature
             if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(view["node_ids"][m["source"]])) == False:
                 if self.parent.DEBUG:
-                    rospy.loginfo("signature not verified")
+                    rospy.loginfo(f"{self.parent.node_id}: signature not verified")
                 return None
             #check hash of message
             if m_hash != view["hash"]:
                 if self.parent.DEBUG:
-                    rospy.loginfo("Hash of message does not match")
+                    rospy.loginfo(f"{self.parent.node_id}: Hash of message does not match")
                 return None
         #send commit message to source node
         payload = {
@@ -2211,7 +2231,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                rospy.loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -2220,7 +2240,7 @@ class SBFT:
         #check if node_id is not the source
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                rospy.loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -2229,12 +2249,12 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check hash of message
         if msg["hash"]  != view["hash"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Hash of message does not match")
+                rospy.loginfo(f"{self.parent.node_id}: Hash of message does not match")
             return None
         #compare node state table
         #if not self.parent.sessions.compare_node_state_table(view['node_ids']):
@@ -2275,7 +2295,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                rospy.loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -2284,7 +2304,7 @@ class SBFT:
         #check if node_id is not the source
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                rospy.loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -2293,7 +2313,7 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
             return None
 
         #compare node state table
@@ -2309,12 +2329,12 @@ class SBFT:
             #verify the message signature
             if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(view["node_ids"][m["source"]])) == False:
                 if self.parent.DEBUG:
-                    rospy.loginfo("signature not verified")
+                    rospy.loginfo(f"{self.parent.node_id}: signature not verified")
                 return None
             #check hash of message
             if m["hash"] != view["hash"]:
                 if self.parent.DEBUG:
-                    rospy.loginfo("Hash of message does not match")
+                    rospy.loginfo(f"{self.parent.node_id}: Hash of message does not match")
                 return None
         #update view
         self.views[view_id]["status"] = "complete"
@@ -2350,7 +2370,7 @@ class NetworkInterface:
         session = self.parent.sessions.get_connection_sessions(message.message["session_id"])
         if not session:
             if self.DEBUG:
-                rospy.loginfo("Invalid session")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid session")
             return
 
         #decrypt message
@@ -2358,14 +2378,14 @@ class NetworkInterface:
             decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
         except:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid key")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid key")
             return
         #validate message
         message.message["message"] = json.loads(decrypted_msg)
         #check counter
         if message.message["message"]["counter"]<session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid counter")
+                rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
             return
         
         return message.message
@@ -2387,7 +2407,7 @@ class NetworkInterface:
             #check if session is available
             if not self.parent.sessions.has_active_connection_session(node_id):
                 if self.parent.DEBUG:
-                    rospy.loginfo("No active session")
+                    rospy.loginfo(f"{self.parent.node_id}: No active session")
                 #return Response("No active session", status=400)
             #get session
             session = self.parent.sessions.get_connection_session_by_node_id(node_id)
@@ -2404,6 +2424,7 @@ class NetworkInterface:
             #prepare message payload
             msg_payload = OrderedDict({
                 "type": "data_exchange",
+                "time":mktime(datetime.datetime.now().timetuple()),
                 "node_id": self.parent.node_id,
                 "node_type": self.parent.node_type,
                 "data": msg_data,
@@ -2415,6 +2436,7 @@ class NetworkInterface:
             #add message to the queue
             self.parent.queues.put_queue({
                 "target": session["node_id"],
+                "time":mktime(datetime.datetime.now().timetuple()),
                 "message": msg_payload,
                 "pos": self.parent.pos,
             },"outgoing")
@@ -2453,36 +2475,36 @@ class RosChain:
         #define base directory
         self.base_directory = base_directory
         #check if key pairs is available
-        rospy.loginfo("ROSChain:Checking if key pairs are available")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Checking if key pairs are available")
         self.pk, self.sk = EncryptionModule.load_keys(f'{self.base_directory}/{self.node_id}_pk.pem', f'{self.base_directory}/{self.node_id}_sk.pem')
         #if not, create new public and private key pair
         if self.pk == None:
-            rospy.loginfo("ROSChain:Key pairs are not available, creating new")
+            rospy.loginfo(f"{self.node_id}: ROSChain:Key pairs are not available, creating new")
             self.pk, self.sk = EncryptionModule.generate_keys()
             EncryptionModule.store_keys(f'{self.node_id}_pk.pem', f'{self.node_id}_sk.pem',self.pk,self.sk)
         #define communication module
-        rospy.loginfo("ROSChain:Initializing communication module")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing communication module")
         self.comm = MQTTCommunicationModule(self.node_id,self.endpoint,self.port,self.auth,self.DEBUG)
         #define session manager
-        rospy.loginfo("ROSChain:Initializing session manager")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing session manager")
         self.sessions = SessionManager(self)
         #define queue
-        rospy.loginfo("ROSChain:Initializing queue manager")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing queue manager")
         self.queues = QueueManager()
         #define network interface
-        rospy.loginfo("ROSChain:Initializing network interface")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing network interface")
         self.network = NetworkInterface(self)
         #define heartbeat protocol
-        rospy.loginfo("ROSChain:Initializing heartbeat protocol")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing heartbeat protocol")
         self.heartbeat = HeartbeatProtocol(self)
         #define discovery protocol
-        rospy.loginfo("ROSChain:Initializing discovery protocol")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing discovery protocol")
         self.discovery = DiscoveryProtocol(self)
         #define blockchain
-        rospy.loginfo("ROSChain:Initializing blockchain")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing blockchain")
         self.blockchain = Blockchain(self)
         #define consensus protocol
-        rospy.loginfo("ROSChain:Initializing consensus protocol")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing consensus protocol")
         self.consensus = SBFT(self)
         #cron interval
         self.cron_interval = 1
@@ -2494,13 +2516,13 @@ class RosChain:
         self.cron_procedures.append(self.consensus.cron)
         self.cron_procedures.append(self.blockchain.cron)
         #define records service
-        rospy.loginfo("ROSChain:Initializing records service")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing records service")
         self.get_record_service = rospy.Service(f'get_records',GetBCRecords,lambda req: self.get_records(req))
         #define submit message service
-        rospy.loginfo("ROSChain:Initializing submit message service")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
         self.submit_message_service = rospy.Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,req))
         #define is_initialized service
-        rospy.loginfo("ROSChain:Initializing is_initialized service")
+        rospy.loginfo(f"{self.node_id}: ROSChain:Initializing is_initialized service")
         self.get_status_service = rospy.Service(f'get_status',Trigger,lambda req: self.get_status(req))
         #node is ready
         self.ready = True
@@ -2521,7 +2543,7 @@ class RosChain:
         '''
         Send message to the given public key
         '''
-        rospy.loginfo(f"Task_allocator: {self.node_id} is sending message of type {args.table_name}")
+        rospy.loginfo(f"{self.node_id}: Task_allocator: {self.node_id} is sending message of type {args.table_name}")
         table_name = args.table_name
         data = args.message
         message = {
@@ -2536,6 +2558,7 @@ class RosChain:
         #add message to the parent queue
         self.comm.buffer.put({
             "message":payload,
+            "time":mktime(datetime.datetime.now().timetuple()),
             "type":"consensus"   
         })
         return SubmitTransactionResponse("Success")
@@ -2590,14 +2613,14 @@ class RosChain:
                         self.consensus.handle(data)
                 else:
                     if self.DEBUG:
-                        rospy.loginfo(f"unknown message type {message.message['type']}")
+                        rospy.loginfo(f"{self.node_id}: unknown message type {message.message['type']}")
             elif str(message_buffer["type"]) == "outgoing":
                 self.comm.send(message_buffer["message"])
             elif str(message_buffer["type"]) == "consensus":
                 self.consensus.send(message_buffer['message'])
             else:
                 if self.DEBUG:
-                    rospy.loginfo(f'unknown message type {message_buffer["type"]}')
+                    rospy.loginfo(f'{self.node_id}: unknown message type {message_buffer["type"]}')
     
         #check if there is any message in output queue
         output_buffer = self.queues.pop_output_queue()
