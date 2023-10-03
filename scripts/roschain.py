@@ -205,7 +205,7 @@ class MQTTCommunicationModule:
         
     def send(self, message):
         if self.DEBUG:
-            rospy.loginfo(f'{self.node_id}: {datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
+            rospy.loginfo(f'{self.node_id}: Sending message to {message["target"]} with type {message["message"]["type"]}')
         #parse message to string
         if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
           message["message"] = json.dumps(message["message"])
@@ -500,12 +500,20 @@ class Blockchain:
     ############################################################
     def create_tables(self):
         #create record table
-        def_query = """ CREATE TABLE IF NOT EXISTS blockchain (
+        def_query = """ CREATE TABLE IF NOT EXISTS transaction (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id INTEGER  NOT NULL,
             item_table TEXT NOT NULL,
-            current_hash TEXT NOT NULL,
-            combined_hash TEXT NOT NULL
+            hash TEXT NOT NULL,
+            timecreated TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS block (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tx_start_id INTEGER  NOT NULL,
+            tx_end_id INTEGER  NOT NULL,
+            merkle_root TEXT NOT NULL,
+            combined_hash TEXT NOT NULL,
+            timecreated TEXT NOT NULL
         );"""
         self.db.query(def_query)
         self.db.update_db_meta()
@@ -514,73 +522,135 @@ class Blockchain:
     # blockchain operations
     ############################################################
     
-    #create the genesis transaction
-    def genesis_transaction(self):
+    #create the genesis block
+    def genesis_block(self):
         #add genesis transaction to the blockchain containing 
         #get previous hash
         prev_hash = self.__get_previous_hash()
         #get current hash
-        current_hash = self.__get_current_hash(0,{})
+        merkle_root = self.__get_merkle_root()
         #combine the hashes
-        combined_hash = self.__get_combined_hash(current_hash,prev_hash)
-        #check first if this record exists
-        trans,_ = self.get_transaction(1)
-        if trans:
-            #compare the combined hash
-            if combined_hash == trans["combined_hash"]:
-                return trans,None
-            else:
-                #flush the whole database
-                self.db.flush()
+        combined_hash = self.__get_combined_hash(merkle_root,prev_hash)
+        
         #add the transaction to the blockchain
-        self.db.insert("blockchain",("item_id",1),("item_table",'blockchain'),("current_hash",current_hash),("combined_hash",combined_hash))
+        self.db.insert("block",("tx_start_id",0),("tx_end_id",0),("merkle_root",merkle_root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
-    def add_sync_record(self,transaction_record,data_record):
-        #get the transaction
-        meta,_ = self.get_transaction(transaction_record["id"])
-        #compare the combined hash
-        if not meta:
-            #add the transaction to the blockchain
-            self.db.insert("blockchain",("item_id",transaction_record["id"]),("item_table",transaction_record["item_table"]),("current_hash",transaction_record["current_hash"]),("combined_hash",transaction_record["combined_hash"]))
-            #add the data to the blockchain
-            self.db.insert(transaction_record["item_table"],*[(key,value) for key,value in data_record.items()])
-            return True
-        else:
-            #compare combined hashes
-            if meta["combined_hash"] == transaction_record["combined_hash"]:
-                return True
+    def add_sync_record(self,block):
+        pass
+        #check if block exists in the blockchain
+        block_exists = self.db.select("block", ["id", "combined_hash"], ("id", "==", block["metadata"]["id"]))
+        if block_exists:
+            if block_exists[0]["combined_hash"] == block["metadata"]["combined_hash"]:
+                return
             else:
-                return False
+                #update block
+                self.db.update(
+                    "block",
+                    ("id", block["metadata"]["id"]),
+                    tx_start_id=block["metadata"]["tx_start_id"],
+                    tx_end_id=block["metadata"]["tx_end_id"],
+                    merkle_root=block["metadata"]["merkle_root"],
+                    combined_hash=block["metadata"]["combined_hash"],
+                    timecreated=block["metadata"]["timecreated"],
+                    )
+        else:
+            #add block
+            self.db.insert(
+                "block",
+                ("id",block["metadata"]["id"]),
+                ("tx_start_id",block["metadata"]["tx_start_id"]),
+                ("tx_end_id",block["metadata"]["tx_end_id"]),
+                ("merkle_root",block["metadata"]["merkle_root"]),
+                ("combined_hash",block["metadata"]["combined_hash"]),
+                ("timecreated",block["metadata"]["timecreated"]),
+            )
+        #insert transactions
+        for transaction,record in block["transactions"].values():
+            #check if transaction exists
+            transaction_exists = self.db.select("transaction", ["id","hash"], ("id", "==", record["id"]))
+            if transaction_exists:
+                if transaction_exists[0]["hash"] == transaction["hash"]:
+                    continue
+                else:
+                    #update transaction
+                    self.db.update(
+                        "transaction",
+                        ("id",transaction["id"]),
+                        item_id=transaction["item_id"],
+                        item_table=transaction["item_table"],
+                        hash=transaction["hash"],
+                        timecreated=transaction["timecreated"],
+                        )
+                    #update the record
+                    self.db.update(
+                        transaction["item_table"],
+                        ("id",record["id"]),
+                        **record
+                    )
+            else:
+                #insert transaction
+                self.db.insert(
+                    "transaction",
+                    ("id",transaction["id"]),
+                    ("item_id",transaction["item_id"]),
+                    ("item_table",transaction["item_table"]),
+                    ("hash",transaction["hash"]),
+                    ("timecreated",transaction["timecreated"])
+                    )
+                #insert the record 
+                self.db.insert(
+                    transaction["item_table"],
+                    *[(key,value) for key,value in record.items()]
+                )
 
     #commit a new transaction to the blockchain
     def add_transaction(self,table,data):
-        last_transaction_id = self.db.get_last_id("blockchain")
-        prev_hash = self.__get_previous_hash(last_transaction_id)
+        
         #add the record to it's table
         self.db.insert(table,*[(key,value) for key,value in data.items()])
         #get the inserted record
         item = self.db.select(table,["*"],*[(key,'==',value) for key,value in data.items()])[0]
         item_id = item["id"]
         #remove the hash from the record
-        current_hash = self.__get_current_hash(last_transaction_id,item)
-        #combine the hashes
-        combined_hash = self.__get_combined_hash(current_hash,prev_hash)
+        last_transaction_id = self.db.get_last_id("transaction")
+        current_hash = self.__get_current_hash(last_transaction_id+1,item)
         #add the transaction to the blockchain
-        self.db.insert("blockchain",("item_id",item_id),("item_table",table),("current_hash",current_hash),("combined_hash",combined_hash))
+        self.db.insert("transaction",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         #sending log info 
         self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
         return item_id
 
+    def add_block(self,transactions):
+        ids = []
+        for transaction in transactions:
+            id =self.add_transaction(transaction["message"]["table_name"],transaction["message"]["data"])
+            ids.append(id)
+    
+        root = self.__get_merkle_root(min(ids),max(ids))
+        #get last id of block
+        last_block_id = self.db.get_last_id("block")
+        #get previous hash
+        prev_hash = self.__get_previous_hash(last_block_id)
+        #combine the hashes
+        combined_hash = self.__get_combined_hash(root,prev_hash)
+        #add the transaction to the blockchain
+        self.db.insert("block",("tx_start_id",min(ids)),("tx_end_id",max(ids)),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
     def get_transaction(self,transaction_id):
-        transaction_data = self.db.select("blockchain",["*"],("id",'==',transaction_id))
+        transaction_data = self.get_metadata(transaction_id)
+        if not transaction_data:
+            return None,None
+        item_data = self.get_record(transaction_data["item_table"],transaction_data["item_id"])
+        if not item_data:
+            return None,None
+        return transaction_data,item_data
+    
+    def get_metadata(self,transaction_id):
+        transaction_data = self.db.select("transaction",["*"],("id",'==',transaction_id))
         if not transaction_data:
             return None,None
         else:
-            transaction_data = transaction_data[0]
-        item_data = self.db.select(transaction_data["item_table"],["*"],("id","==",transaction_data["item_id"]))
-        if item_data:
-            item_data = item_data[0]
-        return transaction_data,item_data
+            return transaction_data[0]
     
     def get_record(self,table,record_id):
         return self.db.select(table,["*"],{"id":record_id})[0]
@@ -605,12 +675,12 @@ class Blockchain:
             prev_hash = EncryptionModule.hash(json.dumps(self.parent.auth))
         else:
             #get the hash of last transaction
-            prev_hash = self.db.select("blockchain",["combined_hash"],("id",'==',last_transaction_id))[0]["combined_hash"]
+            prev_hash = self.db.select("block",["combined_hash"],("id",'==',last_transaction_id))[0]["combined_hash"]
         return prev_hash
     
-    def __get_current_hash(self,last_transaction_id,item):
+    def __get_current_hash(self,transaction_id,item):
         #remove the hash from the record
-        current_hash = EncryptionModule.hash(str(last_transaction_id + 1)+json.dumps(item, sort_keys=True))
+        current_hash = EncryptionModule.hash(str(transaction_id)+json.dumps(item, sort_keys=True))
         return current_hash
     
     def __get_combined_hash(self,current_hash,prev_hash):
@@ -618,6 +688,16 @@ class Blockchain:
         combined_hash = EncryptionModule.hash(current_hash+prev_hash)
         return combined_hash
     #check if the blockchain is valid
+    
+    def __get_merkle_root(self,start_tx_id=None,end_tx_id=None):
+        if start_tx_id is None or start_tx_id < 0:
+            start_tx_id = 0
+        if end_tx_id is None or end_tx_id > self.db.get_last_id("blockchain"):
+            end_tx_id = self.db.get_last_id("blockchain")
+        for i in range(start_tx_id,end_tx_id+1):
+            if not self.validate_transaction(i):
+                return None
+        
 
 
     def validate_chain(self,start_id = None,end_id = None):
@@ -667,7 +747,7 @@ class Blockchain:
             return True 
    
         #check if last combined hash exists in the blockchain
-        last_record = self.db.select("blockchain",["id","combined_hash"],("combined_hash",'==',last_conbined_hash))
+        last_record = self.db.select("block",["id","combined_hash"],("combined_hash",'==',last_conbined_hash))
         if len(last_record) == 0:
             #if not, then return false
             #end_id = self.db.get_last_id("blockchain")
@@ -678,45 +758,52 @@ class Blockchain:
             end_id = last_record[0]["id"]
 
         #check if the number of records is equal to the number of records in the blockchain
-        if record_count != self.db.get_last_id("blockchain"):
+        if record_count != self.db.get_last_id("block"):
             return False
         return True
     
         
     def get_sync_info(self):
-        last_id = self.db.get_last_id("blockchain")
-        last_record = self.db.select("blockchain",["combined_hash"],("id",'==',last_id))
+        last_id = self.db.get_last_id("block")
+        last_record = self.db.select("block",["combined_hash"],("id",'==',last_id))
         if len(last_record) == 0:
             last_record = None
         else:
             last_record = last_record[0]["combined_hash"]
-        number_of_records = self.db.get_last_id("blockchain")
+        number_of_records = self.db.get_last_id("block")
         return last_record,number_of_records
     
     def get_sync_data(self,end_hash,record_count):
         #get end id
  
-        end_id = self.db.select("blockchain",["id"],("combined_hash",'==',end_hash))
+        end_id = self.db.select("block",["id"],("combined_hash",'==',end_hash))
         if len(end_id) == 0 or end_hash is None:
-            end_id = self.db.get_last_id("blockchain")
+            end_id = self.db.get_last_id("block")
             start_id = 1
         else:
             end_id = end_id[0]["id"]
-            if end_id == self.db.get_last_id("blockchain"):
+            if end_id == self.db.get_last_id("block"):
                 return []
             elif end_id != record_count:
                 start_id = 1
-                end_id = self.db.get_last_id("blockchain")
+                end_id = self.db.get_last_id("block")
             else:
                 start_id = end_id + 1
-                end_id = self.db.get_last_id("blockchain")
+                end_id = self.db.get_last_id("block")
         #get the blockchain between start and end id
-        blockchain = []
-        transactions = self.db.select("blockchain",["*"],("id",">=",start_id),("id","<=",end_id))
-        for transaction in transactions:
+        blockchain = {}
+        blocks = self.db.select("block",["*"],("id",">=",start_id),("id","<=",end_id))
+        for block in blocks:
             #get the item
-            item = self.get_record(transaction["item_table"],transaction["item_id"])
-            blockchain.append({transaction["id"]:(transaction,item)})
+            blockchain[block["id"]]={}
+            blockchain[block["id"]]["metadata"] = block
+            blockchain[block["id"]]["transactions"]= {}
+            #get the transactions
+            transactions = self.db.select("blockchain",["*"],("id",">=",block["tx_start_id"]),("id","<=",block["tx_end_id"]))
+            for transaction in transactions:
+                record = self.get_record(block["item_table"],block["item_id"])
+                blockchain[block["id"]]["transactions"][transaction["id"]]=(record,transaction)
+
         return blockchain
     
     def send_sync_request(self):
@@ -783,9 +870,11 @@ class Blockchain:
         if self.views[view_id]["status"] != "pending":
             return
         #check if the number of sync data is more than half of the nodes
-        print(f"number of sync data : {len(self.views[view_id]['sync_data'])}")
-        print(f"number of nodes : {len(self.parent.sessions.get_active_nodes())}")
-        if len(self.views[view_id]["sync_data"]) < len(self.parent.sessions.get_active_nodes())//2:
+        active_nodes = len(self.parent.sessions.get_active_nodes())
+        participating_nodes = len(self.views[view_id]['sync_data'])
+        print(f"number of sync data : {participating_nodes}")
+        print(f"number of nodes : {active_nodes}")
+        if len(self.views[view_id]["sync_data"]) < active_nodes//2:
             rospy.loginfo(f"{self.parent.node_id}: not enough sync data")
             #mark the view as incomplete
             self.views[view_id]["status"] = "incomplete"
@@ -794,22 +883,21 @@ class Blockchain:
         #loop through the sync data and add them to dictionary
         sync_records = {}
         for data in self.views[view_id]["sync_data"]:
-            id = data.keys()[0]
-            if id not in sync_records.keys():
-                sync_records[id] = []
-            sync_records[id].append(data[id])
+            for id,item in data.items():
+                if f"{id}:{item['combined_hash']}" not in sync_records.keys():
+                    sync_records[f"{id}:{item['combined_hash']}"] = {"score":0,"item":item}
+                sync_records[f"{id}:{item['combined_hash']}"]["score"] += 1
+        
+        #loop through the sync records and and delete the ones with the lowest score
+        keys = list(sync_records.keys())
+        for key in keys:
+            if sync_records[key]["score"] < participating_nodes//2:
+                del sync_records[key]
 
         #loop through the sync records and check if each key has the same value for all nodes
-        sync_data = []
-        for id in sync_records.keys():
-            #get the first value
-            value = sync_records[id][0]
-            #check if all the values are the same
-            if all(v == value for v in sync_records[id]):
-                self.add_sync_record(value[0],value[1])
-            else:
-                rospy.loginfo(f"{self.parent.node_id}: the sync data is not the same")
-                return
+        sync_data = [block["item"] for block in sync_records.values()]
+        for block in sync_data.values():
+            self.add_sync_record(block["item"])
         #change the status of the view
         self.views[view_id]["status"] = "complete"
 
@@ -906,7 +994,7 @@ class QueueManager:
     
     def __init__(self):
         self.queue = []
-        self.output_queue = queue.Queue()
+        self.output_queue = []
         
     def put_queue(self, message,msg_type,on_failure=None):
         
@@ -931,25 +1019,42 @@ class QueueManager:
         else:
             data = self.queue.pop(0)
             return data
+        
+    @property
+    def queue_empty(self):
+        return len(self.queue) == 0
     
-    def put_output_queue(self, message,msg_source,msg_type):
+    @property
+    def queue_count(self):
+        return len(self.queue)
+    
+    def put_output_queue(self, message,msg_source,msg_type,timestamp=mktime(datetime.datetime.now().timetuple())):
         
         #add message to queue
-        self.output_queue.put({
+        self.output_queue.append({
             "message": message,
             "source": msg_source,
             "type": msg_type,
-            "timestamp": mktime(datetime.datetime.now().timetuple())
+            "time": timestamp
         })
+        self.output_queue.sort(key=lambda x: x['time'])
+    
+                 
     def pop_output_queue(self):
         #get message from send queue
-        if self.output_queue.empty():
+        if len(self.output_queue)==0:
             return None
         else:
-            data = self.output_queue.get()
-            self.output_queue.task_done()
+            data = self.output_queue.pop(0)
             return data    
         
+    @property
+    def output_queue_empty(self):
+        return len(self.output_queue) == 0
+    
+    @property
+    def output_queue_count(self):
+        return len(self.output_queue)
 ########################################
 # Sessions manager
 ########################################
@@ -2006,7 +2111,7 @@ class SBFT:
         node_ids = self.parent.sessions.get_node_state_table()
         #create view
         self.views[view_id] = {
-            "timestamp":mktime(datetime.datetime.now().timetuple()),
+            "timestamp":msg['timestamp'],
             "last_updated":mktime(datetime.datetime.now().timetuple()),
             "source": self.parent.node_id,
             "message":msg['message'],
@@ -2071,7 +2176,7 @@ class SBFT:
         payload["signature"]=msg_signature
         #create view
         self.views[view_id] = {
-            "timestamp":mktime(datetime.datetime.now().timetuple()),
+            "timestamp":msg['timestamp'],
             "last_updated":mktime(datetime.datetime.now().timetuple()),
             "source": msg['source'],
             "message":msg['message'],
@@ -2285,7 +2390,10 @@ class SBFT:
         self.views[view_id]["status"] = "complete"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #push message to output queue
-        self.parent.queues.put_output_queue(view["message"],view["source"],"dict")
+        try:
+            self.parent.queues.put_output_queue(view["message"],view["source"],"dict",view["timestamp"])
+        except Exception as e:
+            print(f"{self.parent.node_id}: ERROR : {e}")
         #broadcast message
         self.parent.network.send_message('all',payload)
     
@@ -2340,7 +2448,7 @@ class SBFT:
         self.views[view_id]["status"] = "complete"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #push message to output queue
-        self.parent.queues.put_output_queue(view["message"],view["source"],"dict")
+        self.parent.queues.put_output_queue(view["message"],view["source"],"dict",view["timestamp"])
     
     #TODO implement view change
     def generate_view_id(self,length=8):
@@ -2474,6 +2582,10 @@ class RosChain:
         self.port = port
         #define base directory
         self.base_directory = base_directory
+        #define block size 
+        self.block_size = 10
+        #define block tolerance 
+        self.block_tolerance = 5
         #check if key pairs is available
         rospy.loginfo(f"{self.node_id}: ROSChain:Checking if key pairs are available")
         self.pk, self.sk = EncryptionModule.load_keys(f'{self.base_directory}/{self.node_id}_pk.pem', f'{self.base_directory}/{self.node_id}_sk.pem')
@@ -2588,6 +2700,14 @@ class RosChain:
         '''
         #update robot position
         #check if there is any message in comm buffer
+        self.handle_communication_queue()
+        #check if there is any message in output queue
+        self.handle_output_queue()
+        #handle all cron routines
+        self.cron()
+                
+    def handle_communication_queue(self):
+        #check if there is any message in comm buffer
         while self.comm.is_available():
             comm_buffer =self.comm.get()
             self.queues.put_queue(comm_buffer["message"],comm_buffer["type"])
@@ -2621,21 +2741,26 @@ class RosChain:
             else:
                 if self.DEBUG:
                     rospy.loginfo(f'{self.node_id}: unknown message type {message_buffer["type"]}')
-    
+      
+    def handle_output_queue(self):
         #check if there is any message in output queue
-        output_buffer = self.queues.pop_output_queue()
-        
-        if output_buffer:
-            if type(output_buffer["message"]["data"]) == str:
-                output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
-            self.blockchain.add_transaction(output_buffer["message"]["table_name"],output_buffer["message"]["data"])
-            #try:
-                
-            #except Exception as e:
-            #    if self.DEBUG:
-            #        rospy.loginfo(e)
-        #start cron
-        self.cron()
+        if self.queues.output_queue_count >= self.block_size + self.block_tolerance:
+                #get a list of transactions
+                transactions = []
+                for _ in range(self.block_size):
+                    transactions.append(self.queues.pop_output_queue())
+                    output_buffer = self.queues.pop_output_queue()
+                    output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
+                self.blockchain.add_block(transactions)
+                #if output_buffer:
+                #    if type(output_buffer["message"]["data"]) == str:
+                #        output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
+                #    self.blockchain.add_transaction(output_buffer["message"]["table_name"],output_buffer["message"]["data"])
+                    #try:
+                        
+                    #except Exception as e:
+                    #    if self.DEBUG:
+                    #        rospy.loginfo(e)
                 
 #####################################
 # Main
