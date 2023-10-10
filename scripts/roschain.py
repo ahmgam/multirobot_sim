@@ -995,6 +995,7 @@ class QueueManager:
     def __init__(self):
         self.queue = []
         self.output_queue = []
+        self.consensus_queue = []
         
     def put_queue(self, message,msg_type,on_failure=None):
         
@@ -1055,6 +1056,34 @@ class QueueManager:
     @property
     def output_queue_count(self):
         return len(self.output_queue)
+    
+    def put_consensus_queue(self, message,msg_source,msg_type,timestamp=mktime(datetime.datetime.now().timetuple())):
+        
+        #add message to queue
+        self.consensus_queue.append({
+            "message": message,
+            "source": msg_source,
+            "type": msg_type,
+            "time": timestamp
+        })
+        self.consensus_queue.sort(key=lambda x: x['time'])
+    
+                 
+    def pop_consensus_queue(self):
+        #get message from send queue
+        if len(self.consensus_queue)==0:
+            return None
+        else:
+            data = self.consensus_queue.pop(0)
+            return data    
+        
+    @property
+    def consensus_queue_empty(self):
+        return len(self.consensus_queue) == 0
+    
+    @property
+    def consensus_queue_count(self):
+        return len(self.consensus_queue)
 ########################################
 # Sessions manager
 ########################################
@@ -2698,7 +2727,8 @@ class RosChain:
         '''
         start listening for incoming connections
         '''
-        #update robot position
+        #handle consensus queue
+        self.handle_consensus_queue()
         #check if there is any message in comm buffer
         self.handle_communication_queue()
         #check if there is any message in output queue
@@ -2744,13 +2774,11 @@ class RosChain:
       
     def handle_output_queue(self):
         #check if there is any message in output queue
-        if self.queues.output_queue_count >= self.block_size + self.block_tolerance:
+        if self.queues.output_queue_count > 0:
                 #get a list of transactions
                 transactions = []
                 for _ in range(self.block_size):
                     transactions.append(self.queues.pop_output_queue())
-                    output_buffer = self.queues.pop_output_queue()
-                    output_buffer["message"]["data"] = json.loads(output_buffer["message"]["data"])
                 self.blockchain.add_block(transactions)
                 #if output_buffer:
                 #    if type(output_buffer["message"]["data"]) == str:
@@ -2761,7 +2789,25 @@ class RosChain:
                     #except Exception as e:
                     #    if self.DEBUG:
                     #        rospy.loginfo(e)
-                
+              
+    def handle_consensus_queue(self):
+        #check if there is any message in consensus queue
+        if self.queues.consensus_queue_count >= self.block_size + self.block_tolerance:
+            #get a list of transactions
+            transactions = []
+            for _ in range(self.block_size):
+                transactions.append(self.queues.pop_output_queue())
+            payload = {
+                "message":json.dumps(transactions),
+                "source":self.node_id,
+                "timestamp":mktime(datetime.datetime.now().timetuple())
+            }
+            #add message to the parent queue
+            self.comm.buffer.put({
+                "message":payload,
+                "time":mktime(datetime.datetime.now().timetuple()),
+                "type":"consensus"   
+            })
 #####################################
 # Main
 #####################################             
