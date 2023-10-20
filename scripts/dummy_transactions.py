@@ -11,35 +11,35 @@ from random import randint
 class DummyTransactions:
     def __init__(self,planningAlgorithm=None):
         self.node_id,self.node_type,self.update_interval = self.getParameters()
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing")
-        self.node = rospy.init_node('task_allocator', anonymous=True)
+        rospy.loginfo(f"{self.node_id}: dummy_transactions: Initializing")
+        self.node = rospy.init_node('dummy_transactions', anonymous=True)
         self.pos_x = None
         self.pos_y = None
         self.last_state_update = datetime.now()
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing get_records service client")
+        rospy.loginfo(f"{self.node_id}: dummy_transactions: Initializing get_records service client")
         self.submit_message = ServiceProxy(f'submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
     
     def getParameters(self):
-        rospy.loginfo(f"task_allocator: getting namespace")
+        rospy.loginfo(f"dummy_transactions: getting namespace")
         ns = rospy.get_namespace()
         try :
-            node_id= rospy.get_param(f'/{ns}/task_allocator/node_id') # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting node_id argument, and got : {node_id}")
+            node_id= rospy.get_param(f'{ns}/dummy_transactions/node_id') # node_name/argsname
+            rospy.loginfo(f"dummy_transactions: Getting node_id argument, and got : {node_id}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : node_id")
 
         try :
-            node_type= rospy.get_param(f'/{ns}/task_allocator/node_type') # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting node_type argument, and got : {node_type}")
+            node_type= rospy.get_param(f'{ns}/dummy_transactions/node_type') # node_name/argsname
+            rospy.loginfo(f"dummy_transactions: Getting node_type argument, and got : {node_type}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : node_type")
         
         try :
-            update_interval= rospy.get_param(f'/{ns}/task_allocator/update_interval',UPDATE_INTERVAL) # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting update_interval argument, and got : {update_interval}")
+            update_interval= rospy.get_param(f'{ns}/dummy_transactions/update_interval') # node_name/argsname
+            rospy.loginfo(f"dummy_transactions: Getting update_interval argument, and got : {update_interval}")
 
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("Invalid arguments : update_interval")
@@ -77,7 +77,7 @@ class DummyTransactions:
 if __name__ == "__main__":
     
 
-    rospy.loginfo("task_allocator:Starting the task allocation node")
+    rospy.loginfo("dummy_transactions:Starting the task dummy_transactions node")
     robot = DummyTransactions()
     #define rate
     rate = rospy.Rate(10) # 10hz

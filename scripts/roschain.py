@@ -482,14 +482,18 @@ class Blockchain:
     def __init__(self,parent):
         
         #define parent
+        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing")
         self.parent = parent
         # define database manager
         self.db = Database(self.parent.node_id)
+        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing database")
         # create tables
         self.create_tables()
         # define queue for storing data
-        self.genesis_transaction()
+        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing queue")
+        self.genesis_block()
         #sync timeout
+        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing sync timeout")
         self.sync_timeout = 10
         #sync views
         self.views = OrderedDict()
@@ -499,23 +503,28 @@ class Blockchain:
     # Database tabels
     ############################################################
     def create_tables(self):
-        #create record table
-        def_query = """ CREATE TABLE IF NOT EXISTS transaction (
+        
+        #create block table
+        block_table_query = """
+        CREATE TABLE IF NOT EXISTS block (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tx_start_id INTEGER NOT NULL,
+            tx_end_id INTEGER NOT NULL,
+            merkle_root TEXT NOT NULL,
+            combined_hash TEXT NOT NULL,
+            timecreated TEXT NOT NULL
+        );"""
+        self.db.query(block_table_query)
+        #create transaction table
+        transaction_table_query = """
+        CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id INTEGER  NOT NULL,
             item_table TEXT NOT NULL,
             hash TEXT NOT NULL,
             timecreated TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS block (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tx_start_id INTEGER  NOT NULL,
-            tx_end_id INTEGER  NOT NULL,
-            merkle_root TEXT NOT NULL,
-            combined_hash TEXT NOT NULL,
-            timecreated TEXT NOT NULL
         );"""
-        self.db.query(def_query)
+        self.db.query(transaction_table_query)
         self.db.update_db_meta()
 
     ############################################################
@@ -527,13 +536,10 @@ class Blockchain:
         #add genesis transaction to the blockchain containing 
         #get previous hash
         prev_hash = self.__get_previous_hash()
-        #get current hash
-        merkle_root = self.__get_merkle_root()
         #combine the hashes
-        combined_hash = self.__get_combined_hash(merkle_root,prev_hash)
-        
+        combined_hash = self.__get_combined_hash(prev_hash,prev_hash)
         #add the transaction to the blockchain
-        self.db.insert("block",("tx_start_id",0),("tx_end_id",0),("merkle_root",merkle_root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        self.db.insert("block",("tx_start_id",0),("tx_end_id",0),("merkle_root",prev_hash),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
     def add_sync_record(self,block):
         pass
@@ -567,14 +573,14 @@ class Blockchain:
         #insert transactions
         for transaction,record in block["transactions"].values():
             #check if transaction exists
-            transaction_exists = self.db.select("transaction", ["id","hash"], ("id", "==", record["id"]))
+            transaction_exists = self.db.select("transactions", ["id","hash"], ("id", "==", record["id"]))
             if transaction_exists:
                 if transaction_exists[0]["hash"] == transaction["hash"]:
                     continue
                 else:
                     #update transaction
                     self.db.update(
-                        "transaction",
+                        "transactions",
                         ("id",transaction["id"]),
                         item_id=transaction["item_id"],
                         item_table=transaction["item_table"],
@@ -590,7 +596,7 @@ class Blockchain:
             else:
                 #insert transaction
                 self.db.insert(
-                    "transaction",
+                    "transactions",
                     ("id",transaction["id"]),
                     ("item_id",transaction["item_id"]),
                     ("item_table",transaction["item_table"]),
@@ -612,10 +618,10 @@ class Blockchain:
         item = self.db.select(table,["*"],*[(key,'==',value) for key,value in data.items()])[0]
         item_id = item["id"]
         #remove the hash from the record
-        last_transaction_id = self.db.get_last_id("transaction")
-        current_hash = self.__get_current_hash(last_transaction_id+1,item)
+        last_transaction_id = self.db.get_last_id("transactions")
+        current_hash = self.__get_current_hash(item)
         #add the transaction to the blockchain
-        self.db.insert("transaction",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         #sending log info 
         self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
         return item_id
@@ -625,8 +631,14 @@ class Blockchain:
         for transaction in transactions:
             id =self.add_transaction(transaction["message"]["table_name"],transaction["message"]["data"])
             ids.append(id)
-    
-        root = self.__get_merkle_root(min(ids),max(ids))
+        #sord ids list
+        ids.sort()
+        #get all meta data of transactions
+        transactions_meta= []
+        for id in ids:
+            transaction_meta = self.get_metadata(id)
+            transactions_meta.append(transaction_meta)
+        root = self.__get_merkle_root(transactions_meta)
         #get last id of block
         last_block_id = self.db.get_last_id("block")
         #get previous hash
@@ -638,7 +650,7 @@ class Blockchain:
     
     def get_transaction(self,transaction_id):
         transaction_data = self.get_metadata(transaction_id)
-        if not transaction_data:
+        if not transaction_data[0]:
             return None,None
         item_data = self.get_record(transaction_data["item_table"],transaction_data["item_id"])
         if not item_data:
@@ -646,7 +658,7 @@ class Blockchain:
         return transaction_data,item_data
     
     def get_metadata(self,transaction_id):
-        transaction_data = self.db.select("transaction",["*"],("id",'==',transaction_id))
+        transaction_data = self.db.select("transactions",["*"],("id",'==',transaction_id))
         if not transaction_data:
             return None,None
         else:
@@ -678,9 +690,9 @@ class Blockchain:
             prev_hash = self.db.select("block",["combined_hash"],("id",'==',last_transaction_id))[0]["combined_hash"]
         return prev_hash
     
-    def __get_current_hash(self,transaction_id,item):
+    def __get_current_hash(self,item):
         #remove the hash from the record
-        current_hash = EncryptionModule.hash(str(transaction_id)+json.dumps(item, sort_keys=True))
+        current_hash = EncryptionModule.hash(json.dumps(item, sort_keys=True))
         return current_hash
     
     def __get_combined_hash(self,current_hash,prev_hash):
@@ -689,44 +701,77 @@ class Blockchain:
         return combined_hash
     #check if the blockchain is valid
     
-    def __get_merkle_root(self,start_tx_id=None,end_tx_id=None):
-        if start_tx_id is None or start_tx_id < 0:
-            start_tx_id = 0
-        if end_tx_id is None or end_tx_id > self.db.get_last_id("blockchain"):
-            end_tx_id = self.db.get_last_id("blockchain")
-        for i in range(start_tx_id,end_tx_id+1):
-            if not self.validate_transaction(i):
-                return None
-        
+    def __get_merkle_root(self,data):
+
+            
+        if len(data) == 0:
+            return None
+
+        # Initialize a list to hold the current level of hashes
+        current_level = [self.__get_current_hash(d) for d in data]
+
+        while len(current_level) > 1:
+            next_level = []
+
+            # Iterate through pairs of hashes, hash them together, and add to the next level
+            i = 0
+            while i < len(current_level):
+                if i + 1 < len(current_level):
+                    combined_hash = self.__get_current_hash(current_level[i] + current_level[i + 1])
+                    next_level.append(combined_hash)
+                else:
+                    # If there's an odd number of hashes, hash the last one with itself
+                    combined_hash = self.__get_current_hash(current_level[i] + current_level[i])
+                    next_level.append(combined_hash)
+                i += 2
+
+            current_level = next_level
+
+        return current_level[0]
+
 
 
     def validate_chain(self,start_id = None,end_id = None):
         if start_id is None or start_id < 0:
             start_id = 0
-        if end_id is None or end_id > self.db.get_last_id("blockchain"):
-            end_id = self.db.get_last_id("blockchain")
+        if end_id is None or end_id > self.db.get_last_id("block"):
+            end_id = self.db.get_last_id("block")
         for i in range(start_id,end_id+1):
-            if not self.validate_transaction(i):
+            if not self.validate_block(i):
                 return False
         return True
 
-    def validate_transaction(self,transaction_id):
-        #get the transaction
-        transaction_data,item_data = self.get_transaction(transaction_id)
-        #get the previous hash
-        prev_hash = self.__get_previous_hash(transaction_id-1)
-        #get the current hash
-        current_hash = self.__get_current_hash(transaction_id,item_data)
-        #get the combined hash
-        combined_hash = self.__get_combined_hash(current_hash,prev_hash)
-        #check if the combined hash is equal to the combined hash in the blockchain
-        if combined_hash == transaction_data["combined_hash"]:
-            return True
-        else:
-            return False
-
+    def validate_block(self,block_id):
+        #define validation result
+        block_valid = False
+        transactions_valid = True
+        merkle_root_valid = False
+        #get block data 
+        block = self.db.select("block",["*"],("id",'==',block_id))[0]
+        #get previous block 
+        previous_hash = self.__get_previous_hash(block_id-1)
+        #compare the hashes
+        if block["combined_hash"] == self.__get_combined_hash(block["merkle_root"],previous_hash):
+            block_valid= True
+        #get all meta data of transactions
+        transactions_meta= []
+        for id in range(block["start_id"],block["end_id"]+1):
+            #get the transaction
+            transaction_data,item_data = self.get_transaction(id)
+            #get the current hash
+            current_hash = self.__get_current_hash(item_data)
+            #check if the combined hash is equal to the combined hash in the blockchain
+            if current_hash != transaction_data["hash"]:
+                transactions_valid = False
+            transactions_meta.append(transaction_data)
+        #compare merkle roots
+        if self.__get_merkle_root(transactions_meta) == block["merkle_root"]:
+            transactions_valid = True
+        #check if the block is valid
+        if block_valid and transactions_valid:
+            merkle_root_valid = True
+        return block_valid,transactions_valid,merkle_root_valid
         
-    
     ############################################################
     # Syncing the blockchain with other nodes
     ############################################################
