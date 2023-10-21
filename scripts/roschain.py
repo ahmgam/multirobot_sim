@@ -610,7 +610,7 @@ class Blockchain:
                 )
 
     #commit a new transaction to the blockchain
-    def add_transaction(self,table,data):
+    def add_transaction(self,table,data,time =mktime(datetime.datetime.now().timetuple())):
         
         #add the record to it's table
         self.db.insert(table,*[(key,value) for key,value in data.items()])
@@ -621,7 +621,8 @@ class Blockchain:
         last_transaction_id = self.db.get_last_id("transactions")
         current_hash = self.__get_current_hash(item)
         #add the transaction to the blockchain
-        self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        time_created = datetime.datetime.fromtimestamp(time).strftime("%Y-%m-%d %H:%M:%S") 
+        self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",time_created))
         #sending log info 
         self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
         return item_id
@@ -629,7 +630,8 @@ class Blockchain:
     def add_block(self,transactions):
         ids = []
         for transaction in transactions:
-            id =self.add_transaction(transaction["message"]["table_name"],transaction["message"]["data"])
+        
+            id =self.add_transaction(transaction["message"]["table_name"],json.loads(transaction["message"]["data"]),transaction["message"]["time"])
             ids.append(id)
         #sord ids list
         ids.sort()
@@ -941,7 +943,7 @@ class Blockchain:
 
         #loop through the sync records and check if each key has the same value for all nodes
         sync_data = [block["item"] for block in sync_records.values()]
-        for block in sync_data.values():
+        for block in sync_data:
             self.add_sync_record(block["item"])
         #change the status of the view
         self.views[view_id]["status"] = "complete"
@@ -2732,19 +2734,22 @@ class RosChain:
         rospy.loginfo(f"{self.node_id}: Task_allocator: {self.node_id} is sending message of type {args.table_name}")
         table_name = args.table_name
         data = args.message
+        msg_time = mktime(datetime.datetime.now().timetuple())
         message = {
             "table_name":table_name,
-            "data":data
+            "data":data,
+            "time":msg_time
         }
         #payload 
         payload = {
             "message":message,
-            "source":self.node_id
+            "source":self.node_id,
+            "timestamp":msg_time
         }
         #add message to the parent queue
         self.comm.buffer.put({
             "message":payload,
-            "time":mktime(datetime.datetime.now().timetuple()),
+            "time":msg_time,
             "type":"consensus"   
         })
         return SubmitTransactionResponse("Success")
@@ -2819,7 +2824,7 @@ class RosChain:
       
     def handle_output_queue(self):
         #check if there is any message in output queue
-        if self.queues.output_queue_count > 0:
+        if self.queues.output_queue_count > 10:
                 #get a list of transactions
                 transactions = []
                 for _ in range(self.block_size):
