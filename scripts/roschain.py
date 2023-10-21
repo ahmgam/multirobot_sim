@@ -2378,7 +2378,7 @@ class SBFT:
             m_hash = m.pop('hash')
             m_data = json.dumps(m)
             #verify the message signature
-            if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(view["node_ids"][m["source"]])) == False:
+            if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(self.parent.sessions.node_states[msg['source']]["pk"])) == False:
                 if self.parent.DEBUG:
                     rospy.loginfo(f"{self.parent.node_id}: signature not verified")
                 return None
