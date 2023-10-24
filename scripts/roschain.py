@@ -621,7 +621,7 @@ class Blockchain:
         last_transaction_id = self.db.get_last_id("transactions")
         current_hash = self.__get_current_hash(item)
         #add the transaction to the blockchain
-        time_created = datetime.datetime.fromtimestamp(time).strftime("%Y-%m-%d %H:%M:%S") 
+        time_created = datetime.datetime.fromtimestamp(time).strftime("%Y-%m-%d %H:%M:%S") if type(time) == float else time
         self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",time_created))
         #sending log info 
         self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
@@ -2022,10 +2022,10 @@ class HeartbeatProtocol:
         #validate message
         message.message["message"] = json.loads(decrypted_msg)
         #check counter
-        if message.message["message"]["counter"]<=session["counter"]:
-            if self.parent.DEBUG:
-                rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
-            return
+        #if message.message["message"]["counter"]<=session["counter"]:
+        #    if self.parent.DEBUG:
+        #        rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
+        #    return
         #update node state table
         #self.parent.server.logger.warning(f'table request : {json.dumps(message.message["message"]["data"])}' )
         self.parent.sessions.update_node_state_table(message.message["message"]["data"])
@@ -2100,10 +2100,10 @@ class HeartbeatProtocol:
         message.message["message"] = json.loads(decrypted_msg)
         #self.parent.server.logger.warning(f'table response : {json.dumps(message.message["message"]["data"])}' )
         #check counter
-        if message.message["message"]["counter"]<=session["counter"]:
-            if self.parent.DEBUG:
-                rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
-            return
+        #if message.message["message"]["counter"]<=session["counter"]:
+        #    if self.parent.DEBUG:
+        #        rospy.loginfo(f"{self.parent.node_id}: Invalid counter")
+        #    return
         #update node state table
         self.parent.sessions.update_node_state_table(message.message["message"]["data"])
         #update session
@@ -2359,7 +2359,7 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo(f"{self.parent.node_id}: signature not verified")
+                rospy.loginfo(f"{self.parent.node_id}: message signature not verified")
             return None
         #check hash of message
         if msg["hash"] != view["hash"]:
@@ -2378,9 +2378,9 @@ class SBFT:
             m_hash = m.pop('hash')
             m_data = json.dumps(m)
             #verify the message signature
-            if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(self.parent.sessions.node_states[msg['source']]["pk"])) == False:
+            if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(self.parent.sessions.node_states[m['source']]["pk"])) == False:
                 if self.parent.DEBUG:
-                    rospy.loginfo(f"{self.parent.node_id}: signature not verified")
+                    rospy.loginfo(f"{self.parent.node_id}: signature of {m['source']} not verified")
                 return None
             #check hash of message
             if m_hash != view["hash"]:
@@ -2738,7 +2738,7 @@ class RosChain:
         message = {
             "table_name":table_name,
             "data":data,
-            "time":msg_time
+            "time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
         }
         #payload 
         payload = {
