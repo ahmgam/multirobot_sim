@@ -1,19 +1,40 @@
 from collections import OrderedDict
 from time import mktime
 from datetime import datetime
-from encryption import EncryptionModule
 from random import choices
 from string import ascii_uppercase, digits
+from multirobot_sim.srv import FunctionCall, FunctionCallRequest, FunctionCallResponse
+import json
+import rospy
 class SessionManager:
-    def __init__(self,parent):
+    def __init__(self,node_id):
         #define session manager
-        self.parent = parent
         self.discovery_sessions =OrderedDict()
         self.connection_sessions = OrderedDict()
-        self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
-   
-    def create_discovery_session(self, node_id, data):
+        #self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
+        self.node_states = OrderedDict()
+        self.node = rospy.init_node("session_manager", anonymous=True)
+        self.server = rospy.Service('call', FunctionCall, self.handle_function_call)
+        self.node_id = node_id
+        self.refresh_node_state_table()
+        self.node_id = node_id
         
+    def handle_function_call(self,req):
+        #get function name and arguments from request
+        function_name = req.function_name
+        args = json.loads(req.args)
+        if type(args) is not list:
+            args = [args]
+        #call function
+        response = getattr(self,function_name)(*args)
+        if response is None:
+            response = FunctionCallResponse(r'{}')
+        else:
+            response = json.dumps(response) if type(response) is not str else response
+            response = FunctionCallResponse(response)
+        return response
+        
+    def create_discovery_session(self, node_id, data):
         #create new session with the given public key and type
         data["node_id"] = node_id
         #add last call timestamp
@@ -124,3 +145,12 @@ class SessionManager:
                 continue
             else:
                 self.node_states[value["node_id"]] = {"pk":value["pk"],"last_active":mktime(datetime.datetime.now().timetuple())}
+
+if __name__ == "__main__":
+    ns = rospy.get_namespace()
+    try :
+        node_id= rospy.get_param(f'{ns}/roschain/node_id') # node_name/argsname
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_id")
+    session = SessionManager(node_id)
+    rospy.spin()

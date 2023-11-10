@@ -67,6 +67,7 @@ add_service_files(
   SubmitTransaction.srv
   AddGoal.srv
   DatabaseQuery.srv
+  FunctionCall.srv
 )
 
 ## Generate actions in the 'action' folder
