@@ -1,10 +1,13 @@
+
+#################################
+# Encryption Module
+################################
 import rsa
 import os
 from cryptography.fernet import Fernet
 from base64 import  b64encode, b64decode
 import json
 from math import ceil
-from rospy import loginfo
 class EncryptionModule:
     
     @staticmethod
@@ -131,7 +134,7 @@ class EncryptionModule:
                 result.append(rsa.decrypt(message[start_index:end_index], sk).decode("ascii"))   
             return ''.join(result)
         except Exception as e:
-            loginfo(f"error decrypting message: {e}")
+            print(f"error decrypting message: {e}")
             return None
     
     @staticmethod
@@ -143,3 +146,4 @@ class EncryptionModule:
     def decrypt_symmetric(ciphertext,key):
         f = Fernet(key.encode("ascii"))
         return f.decrypt(b64decode(ciphertext.encode('utf-8'))).decode("ascii")
+    

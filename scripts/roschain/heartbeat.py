@@ -2,8 +2,8 @@ from collections import OrderedDict
 from encryption import EncryptionModule
 import datetime
 import json
-from time import mktime,sleep
-
+from time import mktime
+from rospy import loginfo
 class HeartbeatProtocol:
     
     def __init__(self,parent):
@@ -20,7 +20,6 @@ class HeartbeatProtocol:
             session_time = mktime(datetime.datetime.now().timetuple()) - session["last_heartbeat"]
             if session_time > self.heartbeat_interval and session["status"] == "active":
                 #send heartbeat
-                rospy.loginfo("sending heartbeat from cron")
                 self.send_heartbeat(session)
                 #update last heartbeat time
                 self.parent.sessions.connection_sessions[session_id]["last_heartbeat"] = mktime(datetime.datetime.now().timetuple())
@@ -28,17 +27,16 @@ class HeartbeatProtocol:
         
         if message.message["type"] == "heartbeat_request":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat")
             self.handle_heartbeat(message)
         elif message.message["type"] == "heartbeat_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat_response")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat_response")
             self.handle_heartbeat_response(message)
         else:
             if self.parent.DEBUG:
-                rospy.loginfo(f"unknown message type {message.message['type']}")
+                loginfo(f"{self.parent.node_id}: unknown message type {message.message['type']}")
                 
-    
     def send_heartbeat(self,session):
         
         #send heartbeat to session
@@ -60,6 +58,7 @@ class HeartbeatProtocol:
             "node_type": self.parent.node_type,
             "port": self.parent.port,
             "type": "heartbeat_request",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "pos": self.parent.pos,
             "message":encrypted_msg
             })
@@ -71,8 +70,9 @@ class HeartbeatProtocol:
         payload["signature"] = msg_signature
         #send message
         self.parent.queues.put_queue({"target": session["node_id"],
-                        "message": payload,
-                        "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
            
     def handle_heartbeat(self,message):
         #receive heartbeat from node
@@ -80,7 +80,7 @@ class HeartbeatProtocol:
         session = self.parent.sessions.get_connection_sessions(message.message["session_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid session")
+                loginfo(f"{self.parent.node_id}: Invalid session")
             return
         #get message hash and signature
         buff = message.message.copy()
@@ -90,29 +90,29 @@ class HeartbeatProtocol:
         #verify message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid signature")
+                loginfo(f"{self.parent.node_id}: Invalid signature")
             return
         #decrypt message
         try:
             decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
         except:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid key")
+                loginfo(f"{self.parent.node_id}: Invalid key")
             return
         #validate message
         message.message["message"] = json.loads(decrypted_msg)
         #check counter
-        if message.message["message"]["counter"]<=session["counter"]:
-            if self.parent.DEBUG:
-                rospy.loginfo("Invalid counter")
-            return
+        #if message.message["message"]["counter"]<=session["counter"]:
+        #    if self.parent.DEBUG:
+        #        loginfo(f"{self.parent.node_id}: Invalid counter")
+        #    return
         #update node state table
         #self.parent.server.logger.warning(f'table request : {json.dumps(message.message["message"]["data"])}' )
         self.parent.sessions.update_node_state_table(message.message["message"]["data"])
         #chcek blockchain status
         if self.parent.blockchain.check_sync(*message.message["message"]["blockchain_status"]) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Un synced blockchain, sending sync request")
+                loginfo(f"{self.parent.node_id}: Un synced blockchain, sending sync request")
             self.parent.blockchain.send_sync_request()
             
         #prepare message 
@@ -134,6 +134,7 @@ class HeartbeatProtocol:
             "node_type":self.parent.node_type,
             "port": self.parent.port,
             "type": "heartbeat_response",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "pos": self.parent.pos,
             "message":encrypted_msg
             })
@@ -145,8 +146,9 @@ class HeartbeatProtocol:
         payload["signature"] = msg_signature
         #send message
         self.parent.queues.put_queue({"target": session["node_id"],
-                        "message": payload,
-                        "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
  
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node
@@ -154,7 +156,7 @@ class HeartbeatProtocol:
         session = self.parent.sessions.get_connection_sessions(message.message["session_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid session")
+                loginfo(f"{self.parent.node_id}: Invalid session")
             return
         
         #get message hash and signature
@@ -165,23 +167,23 @@ class HeartbeatProtocol:
         #verify message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid signature")
+                loginfo(f"{self.parent.node_id}: Invalid signature")
             return
         #decrypt message
         try:
             decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
         except:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid key")
+                loginfo(f"{self.parent.node_id}: Invalid key")
             return
         #validate message
         message.message["message"] = json.loads(decrypted_msg)
         #self.parent.server.logger.warning(f'table response : {json.dumps(message.message["message"]["data"])}' )
         #check counter
-        if message.message["message"]["counter"]<session["counter"]:
-            if self.parent.DEBUG:
-                rospy.loginfo("Invalid counter")
-            return
+        #if message.message["message"]["counter"]<=session["counter"]:
+        #    if self.parent.DEBUG:
+        #        loginfo(f"{self.parent.node_id}: Invalid counter")
+        #    return
         #update node state table
         self.parent.sessions.update_node_state_table(message.message["message"]["data"])
         #update session
@@ -191,6 +193,5 @@ class HeartbeatProtocol:
         #chcek blockchain status
         if self.parent.blockchain.check_sync(*message.message["message"]["blockchain_status"]) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("Un synced blockchain, sending sync request")
+                loginfo(f"{self.parent.node_id}: Un synced blockchain, sending sync request")
             self.parent.blockchain.send_sync_request()    
-      

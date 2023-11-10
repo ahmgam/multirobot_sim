@@ -1,145 +1,74 @@
-import datetime
-import requests
-from flask import Flask, request
+
 from queue import Queue
-import pika 
 import json
 import rospy
-
-
-class HTTPCommunicaionModule:
+from paho.mqtt import client as mqtt_client
+from collections import OrderedDict
+class MQTTCommunicationModule:
     def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
         self.node_id = node_id
-        self.server = Flask(__name__)
-        self.server.add_url_rule('/', 'listen',lambda : self.listen(self), methods=['POST'])
-        self.server.add_url_rule('/send', 'send',lambda : self.send_message(self), methods=['POST'])
         self.endpoint = endpoint
         self.port = port
         self.auth = auth
         self.DEBUG = DEBUG
+        self.base_topic = "nodes"
+        self.log_topic = 'logs'
         self.buffer = Queue()
+        self.__init_mqtt()
         self.counter = 0
         self.timeout = 5
-    def send(self, message):
-        if self.DEBUG:
-            rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
-        headers = {'Content-Type': 'application/json'}
-        if self.auth != None:
-            headers['Authorization'] = self.auth
+
+    def __init_mqtt(self):
+        self.client = mqtt_client.Client(self.node_id)
+        if self.auth is not None:
+            self.client.username_pw_set(self.auth["username"],self.auth["password"])
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
         try:
-            req =   requests.post(self.endpoint+'/',
-                                json = message,
-                                headers = headers,timeout=self.timeout)
+            self.client.connect(self.endpoint, self.port)
+            self.client.subscribe(f"{self.base_topic}/{self.node_id}")
+            self.client.subscribe(f"{self.base_topic}")
         except Exception as e:
-            if self.DEBUG:
-                rospy.loginfo(f"Error sending message: {e}")
-            return False
-        if req.status_code == 200:
-            self.counter += 1
-            return True
-        else :
-            if self.DEBUG:
-                rospy.loginfo(f"Error sending message: {req.status_code}")
-            return False
-        
-    @staticmethod
-    def listen(self):
-        '''
-        receive message from the network
-        '''
-        #add to buffer
-        data = request.json
-        self.buffer.put({
-            "message":data,
-            "type":"incoming"
-        })
-        return "OK"
-    
-    def get(self):
-        if self.buffer.empty():
-            return None
-        else:
-            return self.buffer.get()
-        
-    def is_available(self):
-        return not self.buffer.empty()
+            rospy.loginfo(f"{self.node_id}: Error connecting to MQTT: {e}")
+            return
 
-    @staticmethod
-    def send_message(self):
-        '''
-        Send message to the given public key
-        '''
-        #get data 
-        data = request.json
-        message = data["message"]
-        #payload 
-        payload = {
-            "message":message,
-            "source":self.node_id
-        }
-        #add message to the parent queue
-        self.buffer.put({
-            "message":payload,
-            "type":"consensus"   
-        })
-        return True
-    
-    def start(self):
-        self.server.run(port=self.port,debug=self.DEBUG)
+    def on_message(self, client, userdata, message):
+        self.buffer.put({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"})
 
-
-
-class RabbitMQCommunicationModule:
-    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
-        self.node_id = node_id
-        self.endpoint = endpoint
-        self.port = port
-        self.auth = auth
-        self.DEBUG = DEBUG
-        self.buffer = Queue()
-        self.__init_rabbitmq()
-        self.counter = 0
-        self.timeout = 5
-
-    def __init_rabbitmq(self):
-        try:
-            if self.auth == None:
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host = self.endpoint,
-                port=self.port,
-                ))
-            else:
-                self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-                    host = self.endpoint,
-                    port=self.port,
-                    credentials=pika.PlainCredentials(username=self.auth["username"],password=self.auth["password"])
-                    ))
-            self.channel = self.connection.channel()
-            self.channel.exchange_declare(exchange='brodcast', exchange_type='fanout')
-            self.channel.queue_declare(queue=self.node_id)
-            self.channel.queue_bind(exchange='brodcast', queue=self.node_id)
-        except pika.exceptions.AMQPConnectionError as e:
-            raise Exception(f"Error connecting to RabbitMQ: {e}")
+    def on_connect(self, client, userdata, flags, rc):
+        rospy.loginfo(f"{self.node_id}: Connected with result code " + str(rc))
+        self.client.subscribe(f"{self.base_topic}/{self.node_id}")
+        self.client.subscribe(f"{self.base_topic}")
         
     def send(self, message):
         if self.DEBUG:
-            rospy.loginfo(f'{datetime.datetime.now()} : Sending message to {message["target"]} with type {message["message"]["type"]}')
+            rospy.loginfo(f'{self.node_id}: Sending message to {message["target"]} with type {message["message"]["type"]}')
+        #parse message to string
+        if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
+          message["message"] = json.dumps(message["message"])
+        else:
+          message["message"] = str(message["message"])
         try:
             if message["target"] == "all":
-                self.channel.basic_publish(exchange='brodcast', routing_key='', body=json.dumps(message["message"]))
+                self.client.publish(f"{self.base_topic}", message["message"])
             else:
-                self.channel.basic_publish(exchange='', routing_key=message["target"], body=str(message))
+                self.client.publish(f"{self.base_topic}/{message['target']}", message["message"])
+            self.counter += 1
             return True
-        except pika.exceptions.AMQPConnectionError as e:
-            rospy.loginfo(f"Error sending message: {e}")
+        except Exception as e:
+            rospy.loginfo(f"{self.node_id}: Error sending message: {e}")
             return False
         
+    def send_log(self,message):
+        self.client.publish(f"{self.log_topic}", f"{self.node_id}|{message}")
 
-    
     def get(self):
-        _, _, body = self.channel.basic_get(queue=self.node_id, auto_ack=True)
-        return body
+        #self.client.loop()
+        if self.is_available():
+            return self.buffer.get()
+        else:
+            return None
         
     def is_available(self):
+        self.client.loop_read()
         return not self.buffer.empty()
-

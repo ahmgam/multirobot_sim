@@ -5,6 +5,12 @@ from encryption import EncryptionModule
 from math import ceil
 from time import mktime
 import datetime
+from rospy import loginfo
+
+#######################################
+# Consensus protocol SPFT
+#######################################
+
 class SBFT:
     def __init__(self,parent) -> None:
         #define parent
@@ -20,7 +26,7 @@ class SBFT:
         for view_id,view in self.views.copy().items():
             if mktime(datetime.datetime.now().timetuple()) - view['last_updated'] > self.view_timeout:
                 if self.parent.DEBUG:
-                    rospy.loginfo(f"View {view_id} timed out")
+                    loginfo(f"{self.parent.node_id}: View {view_id} timed out")
                 self.views.pop(view_id)
         
     def handle(self, msg):
@@ -29,42 +35,42 @@ class SBFT:
         operation = msg['operation']
         if operation == 'pre-prepare':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting pre-prepare")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting pre-prepare")
             self.pre_prepare(msg)
         elif operation == 'prepare':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting prepare")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting prepare")
             self.prepare(msg)
         elif operation == 'prepare-collect':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting prepare-collect")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting prepare-collect")
             self.prepare_collect(msg)
         elif operation == 'commit':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting commit")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting commit")
             self.commit(msg)
         elif operation == 'commit-collect':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting commit-collect")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting commit-collect")
             self.commit_collect(msg)
         elif operation == 'sync_request':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting sync_request")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting sync_request")
             self.parent.blockchain.handle_sync_request(msg)
         elif operation == 'sync_reply':
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['source']} of type {msg['operation']}, starting sync_response")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['source']} of type {msg['operation']}, starting sync_response")
             self.parent.blockchain.handle_sync_reply(msg)
         else:
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {msg['message']['node_id']} of type {msg['message']['type']}, but no handler found")
+                loginfo(f"{self.parent.node_id}: Received message from {msg['message']['node_id']} of type {msg['message']['type']}, but no handler found")
             pass
     
     def send(self,msg):
         #check message type 
         if not type(msg['message']) in [dict,str]:
             if self.parent.DEBUG:
-                rospy.loginfo("Invalid message type")
+                loginfo(f"{self.parent.node_id}: Invalid message type")
             return
         #create view number 
         view_id = self.generate_view_id()
@@ -72,7 +78,7 @@ class SBFT:
         node_ids = self.parent.sessions.get_node_state_table()
         #create view
         self.views[view_id] = {
-            "timestamp":mktime(datetime.datetime.now().timetuple()),
+            "timestamp":msg['timestamp'],
             "last_updated":mktime(datetime.datetime.now().timetuple()),
             "source": self.parent.node_id,
             "message":msg['message'],
@@ -103,7 +109,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is already created")
+                loginfo(f"{self.parent.node_id}: View is already created")
             return
         #get the session 
         session = self.parent.sessions.get_connection_session_by_node_id(msg['source'])
@@ -114,12 +120,12 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #compare node state table
         if not self.parent.sessions.compare_node_state_table(msg['node_ids']):
             if self.parent.DEBUG:
-                rospy.loginfo("Node state table not equal")
+                loginfo(f"{self.parent.node_id}: Node state table not equal")
             return None
         #message payload
         payload = {
@@ -137,7 +143,7 @@ class SBFT:
         payload["signature"]=msg_signature
         #create view
         self.views[view_id] = {
-            "timestamp":mktime(datetime.datetime.now().timetuple()),
+            "timestamp":msg['timestamp'],
             "last_updated":mktime(datetime.datetime.now().timetuple()),
             "source": msg['source'],
             "message":msg['message'],
@@ -157,18 +163,18 @@ class SBFT:
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
-        rospy.loginfo(view)
+        #loginfo(view)
         #get session
         session = self.parent.sessions.get_connection_session_by_node_id(msg['source'])
         #check if node_id is not the source
-        rospy.loginfo(session)
+        #loginfo(session)
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -178,19 +184,19 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check hash of message
         if msg_hash != view["hash"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Hash of message does not match")
+                loginfo(f"{self.parent.node_id}: Hash of message does not match")
             return None
         msg["signature"] = msg_signature
         msg["hash"] = msg_hash
         #compare node state table
         #if not self.parent.sessions.compare_node_state_table(msg['node_ids']):
         #    if self.parent.DEBUG:
-        #        rospy.loginfo("Node state table not equal")
+        #        loginfo("Node state table not equal")
         #    return None
         #add message to prepare
         self.views[view_id]["prepare"].append(msg)
@@ -222,11 +228,11 @@ class SBFT:
     def prepare_collect(self,msg):
         #handle prepare-collect message
         #check if view exists
-        rospy.loginfo(msg)
+        #loginfo(msg)
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -235,7 +241,7 @@ class SBFT:
         #check if node_id is not the source
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -244,17 +250,17 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: message signature not verified")
             return None
         #check hash of message
         if msg["hash"] != view["hash"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Hash of message does not match")
+                loginfo(f"{self.parent.node_id}: Hash of message does not match")
             return None
         #compare node state table
         #if not self.parent.sessions.compare_node_state_table(msg['node_ids']):
         #    if self.parent.DEBUG:
-        #        rospy.loginfo("Node state table not equal")
+        #        loginfo("Node state table not equal")
         #    return None
         #loop in prepare-collect
         for m in msg["prepare"]:
@@ -263,14 +269,14 @@ class SBFT:
             m_hash = m.pop('hash')
             m_data = json.dumps(m)
             #verify the message signature
-            if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(view["node_ids"][m["source"]])) == False:
+            if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(self.parent.sessions.node_states[m['source']]["pk"])) == False:
                 if self.parent.DEBUG:
-                    rospy.loginfo("signature not verified")
+                    loginfo(f"{self.parent.node_id}: signature of {m['source']} not verified")
                 return None
             #check hash of message
             if m_hash != view["hash"]:
                 if self.parent.DEBUG:
-                    rospy.loginfo("Hash of message does not match")
+                    loginfo(f"{self.parent.node_id}: Hash of message does not match")
                 return None
         #send commit message to source node
         payload = {
@@ -293,11 +299,11 @@ class SBFT:
     def commit(self,msg):
         #handle commit message
         #check if view exists
-        rospy.loginfo(msg)
+        #loginfo(msg)
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -306,7 +312,7 @@ class SBFT:
         #check if node_id is not the source
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -315,17 +321,17 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check hash of message
         if msg["hash"]  != view["hash"]:
             if self.parent.DEBUG:
-                rospy.loginfo("Hash of message does not match")
+                loginfo(f"{self.parent.node_id}: Hash of message does not match")
             return None
         #compare node state table
         #if not self.parent.sessions.compare_node_state_table(view['node_ids']):
         #    if self.parent.DEBUG:
-        #        rospy.loginfo("Node state table not equal")
+        #        loginfo("Node state table not equal")
         #    return None
         #add message to prepare
         msg["signature"] = msg_signature
@@ -351,7 +357,10 @@ class SBFT:
         self.views[view_id]["status"] = "complete"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #push message to output queue
-        self.parent.queues.put_output_queue(view["message"],view["source"],"dict")
+        try:
+            self.parent.queues.put_output_queue(view["message"],view["source"],"dict",view["timestamp"])
+        except Exception as e:
+            print(f"{self.parent.node_id}: ERROR : {e}")
         #broadcast message
         self.parent.network.send_message('all',payload)
     
@@ -361,7 +370,7 @@ class SBFT:
         view_id = msg['view_id']
         if view_id not in self.views.keys():
             if self.parent.DEBUG:
-                rospy.loginfo("View is not created")
+                loginfo(f"{self.parent.node_id}: View is not created")
             return
         #get view 
         view = self.views[view_id]
@@ -370,7 +379,7 @@ class SBFT:
         #check if node_id is not the source
         if self.parent.node_id == msg['source']:
             if self.parent.DEBUG:
-                rospy.loginfo("Node_id is the source")
+                loginfo(f"{self.parent.node_id}: Node_id is the source")
             return
         #verify signature
         msg_signature = msg.pop('signature')
@@ -379,13 +388,13 @@ class SBFT:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
 
         #compare node state table
         #if not self.parent.sessions.compare_node_state_table(msg['node_ids']):
         #    if self.parent.DEBUG:
-        #        rospy.loginfo("Node state table not equal")
+        #        loginfo("Node state table not equal")
         #    return None
         #loop in prepare-collect
         for m in msg["commit"]:
@@ -395,18 +404,18 @@ class SBFT:
             #verify the message signature
             if EncryptionModule.verify(m_data, m_signature, EncryptionModule.reformat_public_key(view["node_ids"][m["source"]])) == False:
                 if self.parent.DEBUG:
-                    rospy.loginfo("signature not verified")
+                    loginfo(f"{self.parent.node_id}: signature not verified")
                 return None
             #check hash of message
             if m["hash"] != view["hash"]:
                 if self.parent.DEBUG:
-                    rospy.loginfo("Hash of message does not match")
+                    loginfo(f"{self.parent.node_id}: Hash of message does not match")
                 return None
         #update view
         self.views[view_id]["status"] = "complete"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #push message to output queue
-        self.parent.queues.put_output_queue(view["message"],view["source"],"dict")
+        self.parent.queues.put_output_queue(view["message"],view["source"],"dict",view["timestamp"])
     
     #TODO implement view change
     def generate_view_id(self,length=8):

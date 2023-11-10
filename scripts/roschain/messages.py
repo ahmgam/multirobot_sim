@@ -172,8 +172,11 @@ Network peer data message format:
 '''
 
 import json
-from hashlib import sha256
 from collections import OrderedDict
+from rospy import loginfo
+#########################################
+# Messages 
+#########################################
 
 class Message :
     def __init__(self,data, **kwargs):
@@ -188,11 +191,11 @@ class Message :
             
     def __check_required_fields(self,required_fields,data):
         if not isinstance(required_fields,list):
-            rospy.loginfo("required_fields must be a list")
+            loginfo("required_fields must be a list")
             raise TypeError("required_fields must be a list")    
         for value in required_fields:
             if value not in data["message"]["data"].keys():
-                rospy.loginfo("field {} is required".format(value))
+                loginfo("field {} is required".format(value))
                 raise ValueError("field {} is required".format(value))
 
     def __validate(self,data):
@@ -220,8 +223,6 @@ class Message :
         #sign the message
         self.message["signature"] = private_key.sign(self.message["hash"].encode("utf-8"))
         
-
-    
 class DiscoveryMessage(Message):
     def __init__(self,data):
         #definte required fields
@@ -257,11 +258,4 @@ class ApprovalResponseMessage(Message):
         #definte required fields
         required_fields = ["session_id","test_message"]
         super().__init__(data,required_fields=required_fields)
-                
-if __name__ == "__main__":
-    m = Message("public_key",type="discovery")
-    rospy.loginfo(m)
-    rospy.loginfo(m.get_hash())
-    rospy.loginfo(m.get_timestamp())
-    rospy.loginfo(m.generate_id())
-    rospy.loginfo(m)
+ 

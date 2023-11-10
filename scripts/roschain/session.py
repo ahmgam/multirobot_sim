@@ -1,9 +1,9 @@
-from time import mktime
-import datetime
-from random import choices
-from string import digits, ascii_uppercase
 from collections import OrderedDict
+from time import mktime
+from datetime import datetime
 from encryption import EncryptionModule
+from random import choices
+from string import ascii_uppercase, digits
 class SessionManager:
     def __init__(self,parent):
         #define session manager

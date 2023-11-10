@@ -1,15 +1,20 @@
-import sqlite3
-import random
+
+####################################
+# Database module
+###################################
+
+import json
 import rospy
+from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest
+
 class Database (object):
-    def __init__(self, path, schema=None):
-        self.connection = sqlite3.connect(path, check_same_thread=False)
-        self.connection.row_factory = Database.dict_factory
-        if schema:
-            with open(schema) as f:
-                self.connection.executescript(f.read())
-        self.cursor = self.connection.cursor()
+    def __init__(self,node_id):
+        #self.working = False
+        self.node_id = node_id
+        self.query_client = rospy.ServiceProxy(f"{self.node_id}/query", DatabaseQuery)
+        self.query_client.wait_for_service()
         self.tabels = self.__get_db_meta()
+        
 
     def __get_db_meta(self):
         cols = self.query("""
@@ -49,8 +54,6 @@ class Database (object):
                 else:
                     raise Exception("Column type not supported")
         return tabels
-    def __del__(self):
-        self.connection.close()
 
     def __table_exists(self,table_name):
         return table_name in self.tabels.keys()
@@ -98,11 +101,17 @@ class Database (object):
         #build query
         query = "INSERT INTO {table} ({keywords}) VALUES ({values})".format(
             table=table_name,keywords=",".join(keyword[0] for keyword in keywords),
-            values=",".join(["?" for i in range(len(keywords))])
-            )
+            values=",".join(str(keyword[1]) if type(keyword[1]) != str else f"'{keyword[1]}'" for keyword in keywords))
+            
         #execute query
-        return self.query(query,tuple([keyword[1] for keyword in keywords]))
+        self.query(query)
+       
+        return 
         
+    def flush(self):
+        for table_name in self.tabels.keys():
+            self.query(f"DROP TABLE IF EXISTS {table_name}")
+
     def select(self,table_name,fields,*conditions):
         
         #check if table exists
@@ -125,10 +134,10 @@ class Database (object):
         #build query
         query = "SELECT {fields} FROM {table} {options}".format(
             fields=",".join(fields),table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" if type(condition[2]) != str else f"{condition[0]} {condition[1]} '{condition[2]}'" for condition in conditions]) if len(conditions) > 0  else ""
             )
-        #execute query
-        return self.query(query,tuple([condition[2] for condition in conditions]))
+     
+        return self.query(query)
     
     def delete(self,table_name,*conditions):
 
@@ -147,10 +156,10 @@ class Database (object):
         #build query
         query = "DELETE FROM {table} {options}".format(
             table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
         #execute query
-        return self.query(query,tuple([condition[2] for condition in conditions]))
+        return self.query(query)
     
     def update(self,table_name,*conditions,**keyword):
 
@@ -173,12 +182,12 @@ class Database (object):
         #build query
         query = "UPDATE {table} SET {keywords} {options}".format(
             table=table_name,
-            keywords=",".join([f"{key} = ?" for key in keyword]),
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            keywords=",".join([f"{key} = {value}" for key,value in keyword.items()]),
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
-        rospy.loginfo(query)
+        #rospy.loginfo(query)
         #execute query
-        return self.query(query,tuple([value for value in keyword.values()]+[condition[2] for condition in conditions]))
+        return self.query(query)
     
     def count(self,table_name,*conditions):
         
@@ -199,10 +208,10 @@ class Database (object):
         #build query
         query = "SELECT COUNT(*) FROM {table} {options}".format(
             table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} ?" for condition in conditions]) if conditions else ""
+            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
         #execute query
-        return self.query(query,tuple([condition[2] for condition in conditions]))
+        return self.query(query)
  
     def get_last_id(self,table_name):
         #check if table exists
@@ -212,28 +221,20 @@ class Database (object):
         if not self.query(f"SELECT * FROM {table_name}"):
             return 0
         return self.query(f"SELECT MAX(id) FROM '{table_name}'")[0]['MAX(id)']
+         
+    def query(self, query):   
+     
+        result = self.query_client(DatabaseQueryRequest(query))
+        data = []
+        if result.id == 0:
+            data = []
+            for i in range(len(result.output)):
+                #parse json without raising exception
+                data.append(json.loads(result.output[i],strict=False))
+            return data
+        else:
+            return result.id
+        
     
-    def initialize(self, path):
-        with open(path) as f:
-            self.connection.executescript(f.read())
-            
-    def query(self, query, args=()):    
-        self.cursor.execute(query, args)
-        self.connection.commit()        
-        return self.cursor.lastrowid if query.startswith('INSERT') else  self.cursor.fetchall()
-    
-    @staticmethod
-    def dict_factory(cursor, row):
-        d = {}
-        for idx, col in enumerate(cursor.description):
-            d[col[0]] = row[idx]
-        return d
-
-if __name__=="__main__":
-    db = Database("db.sqlite3","schema.sql")
-    rospy.loginfo(db.insert("states",("node_id",str(random.randint(0,1000))),("node_type","uav" if random.randint(1,10) %2 == 1 else "ugv"),("timecreated","123456789"),("pos_x",0.0),("pos_y",0.0),("details","")))
-    rospy.loginfo(db.select("states","*",("node_type","==","uav")))
-    db.delete("states",("node_type","==","ugv"))
-    rospy.loginfo(db.select("states","*"))
-    db.update("states",("node_type","==","uav"),node_type="rov")
-    rospy.loginfo(db.get_last_id("states"))
+    def update_db_meta(self):
+        self.tabels = self.__get_db_meta()

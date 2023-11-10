@@ -5,6 +5,11 @@ import datetime
 from random import choices
 from string import ascii_lowercase
 from encryption import *
+from rospy import loginfo
+
+########################################
+# Discovery protocol
+########################################
 
 class DiscoveryProtocol:
     def __init__(self,parent):
@@ -17,6 +22,7 @@ class DiscoveryProtocol:
         
     def cron(self):
         #check if disvoery last call is more than discovery interval
+        #loginfo(f"session time : {mktime(datetime.datetime.now().timetuple()) - self.last_call}")
         if mktime(datetime.datetime.now().timetuple()) - self.last_call > self.discovery_interval:
             #update last call
             self.last_call = mktime(datetime.datetime.now().timetuple())
@@ -27,30 +33,30 @@ class DiscoveryProtocol:
     def handle(self,message):
         if message.message["type"] == "discovery_request":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting response_to_discovery")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting response_to_discovery")
             self.respond_to_discovery(message)
         elif message.message["type"] == "discovery_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery")
             self.verify_discovery(message)
         elif message.message["type"] == "discovery_verification":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery_response")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery_response")
             self.verify_discovery_response(message)
         elif message.message["type"] == "discovery_verification_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery")
             self.approve_discovery(message)
         elif message.message["type"] == "discovery_approval":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery_response")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery_response")
             self.approve_discovery_response(message)
         elif message.message["type"] == "discovery_approval_response":
             if self.parent.DEBUG:
-                rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, starting finalize_discovery")
+                loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting finalize_discovery")
             self.finalize_discovery(message)
         else:
-            rospy.loginfo(f"Received message from {message.message['node_id']} of type {message.message['type']}, but no handler found")
+            loginfo(f"{self.parent.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, but no handler found")
     ################################
     # Challenge management
     ################################   
@@ -76,6 +82,7 @@ class DiscoveryProtocol:
             "pos": self.parent.pos,
             "type": "discovery_request",
             "port": self.parent.port,
+            "time":mktime(datetime.datetime.now().timetuple()),
             "session_id": "",
             "message":{
             "timestamp": str(datetime.datetime.now()),
@@ -94,8 +101,9 @@ class DiscoveryProtocol:
         #create message object
         message = DiscoveryMessage(payload)
         self.parent.queues.put_queue({"target": "all",
-                "message": message.message,
-                "pos": self.parent.pos}, "outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": message.message,
+                                      "pos": self.parent.pos}, "outgoing")
         
     def respond_to_discovery(self,message):
         #respond to discovery requests and send challenge
@@ -104,7 +112,7 @@ class DiscoveryProtocol:
             message = DiscoveryMessage(message.message) 
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"validation error {e}")
+                loginfo(f"{self.parent.node_id}: validation error {e}")
             return None
         #verify the message hash 
         buff = message.message
@@ -115,17 +123,17 @@ class DiscoveryProtocol:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(msg_pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active") 
+                loginfo(f"{self.parent.node_id}: connection session is already active") 
             return None
         #check if the node has active discovery session with the sender
         if self.parent.sessions.get_discovery_session(message.message["node_id"]):
             if self.parent.DEBUG:    
-                rospy.loginfo("discovery session is already active")
+                loginfo(f"{self.parent.node_id}: discovery session is already active")
             return None
         else:
             #create new session
@@ -153,6 +161,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_response",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -165,15 +174,16 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos}, "outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos}, "outgoing")
     
     def verify_discovery(self,message):
         #verify discovery request and send challenge response
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:    
-                rospy.loginfo("connection session is already active")
+                loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #verify the message hash 
         buff = message.message
@@ -186,7 +196,7 @@ class DiscoveryProtocol:
             decrypted_data = json.loads(decrypted_data)
         except Exception as e:
             if self.parent.DEBUG:    
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #validate the message
         message.message["message"] = decrypted_data
@@ -194,12 +204,12 @@ class DiscoveryProtocol:
             message=DiscoveryResponseMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(decrypted_data["data"]["pk"])) == False:
             if self.parent.DEBUG:    
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         try:
             #generate challenge random string
@@ -208,7 +218,7 @@ class DiscoveryProtocol:
             client_sol, server_sol = self.solve_challenge(challenge)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error generating challenge : {e}")
+                loginfo(f"{self.parent.node_id}: error generating challenge : {e}")
             return None
         #create discovery session
         session_data = {
@@ -240,6 +250,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_verification",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -252,21 +263,22 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
  
     def verify_discovery_response(self,message):
         #verify discovery response and add node to the network
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active")
+                loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         
         #verify the message hash 
@@ -279,7 +291,7 @@ class DiscoveryProtocol:
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #decrypt the message
         try:
@@ -287,7 +299,7 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         
         #parse the message
@@ -295,7 +307,7 @@ class DiscoveryProtocol:
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -304,7 +316,7 @@ class DiscoveryProtocol:
             message=VerificationMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         
         #get the challenge from the incoming message
@@ -314,7 +326,7 @@ class DiscoveryProtocol:
         #compare the client challenge response
         if decrypted_data["data"]["client_challenge_response"] != client_sol:
             if self.parent.DEBUG:
-                rospy.loginfo("client challenge response not verified")
+                loginfo(f"{self.parent.node_id}: client challenge response not verified")
             return None
         #update discovery session
         session_data = {
@@ -347,6 +359,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_verification_response",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -359,21 +372,22 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
 
     def approve_discovery(self,message):
         #approve discovery request and send approval response
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active")
+                loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         #get the public key of the sender from the session
         pk = session["pk"]
@@ -388,19 +402,19 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #parse the message
         decrypted_data = json.loads(decrypted_data)
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -409,12 +423,12 @@ class DiscoveryProtocol:
             message=VerificationResponseMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         #compare the client challenge response
         if decrypted_data["data"]["server_challenge_response"] != session["server_challenge_response"]:
             if self.parent.DEBUG:
-                rospy.loginfo("client challenge response not verified")
+                loginfo(f"{self.parent.node_id}: client challenge response not verified")
             return None
         
         #creating new session with symmetric key and session id
@@ -457,6 +471,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_approval",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -469,21 +484,22 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
             
     def approve_discovery_response(self,message):
         #approve discovery response and add node to the network
         #check if the node is already connected to the network
         if self.parent.sessions.has_active_connection_session(message.message["node_id"]):
             if self.parent.DEBUG:
-                rospy.loginfo("connection session is already active")
+                loginfo(f"{self.parent.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         #get the public key of the sender from the session
         pk = session["pk"]
@@ -498,19 +514,19 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #parse the message
         decrypted_data = json.loads(decrypted_data)
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -519,7 +535,7 @@ class DiscoveryProtocol:
             message=ApprovalMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         
         #first generate symmetric key
@@ -531,11 +547,11 @@ class DiscoveryProtocol:
             decrypted_test = EncryptionModule.decrypt_symmetric(decrypted_data["data"]["test_message"],key)
             if decrypted_test != "client_test":
                 if self.parent.DEBUG:
-                    rospy.loginfo("test message not decrypted")
+                    loginfo(f"{self.parent.node_id}: test message not decrypted")
                 return None
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting test message : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting test message : {e}")
             return None
         #create new session
         session_data = {
@@ -571,6 +587,7 @@ class DiscoveryProtocol:
             "node_type": self.parent.node_type,
             "pos": self.parent.pos,
             "type": "discovery_approval",
+            "time":mktime(datetime.datetime.now().timetuple()),
             "port": self.parent.port,
             "session_id": "",
             "message": data_encrypted
@@ -583,8 +600,9 @@ class DiscoveryProtocol:
         payload["signature"] = data_signature
         #send the message
         self.parent.queues.put_queue({"target": message.message["node_id"],
-                    "message": payload,
-                    "pos": self.parent.pos},"outgoing")
+                                      "time":mktime(datetime.datetime.now().timetuple()),
+                                      "message": payload,
+                                      "pos": self.parent.pos},"outgoing")
 
     def finalize_discovery(self,message):
         #approve discovery response and add node to the network
@@ -592,7 +610,7 @@ class DiscoveryProtocol:
         session = self.parent.sessions.get_discovery_session(message.message["node_id"])
         if not session:
             if self.parent.DEBUG:
-                rospy.loginfo("node does not have active discovery session with the sender")
+                loginfo(f"{self.parent.node_id}: node does not have active discovery session with the sender")
             return None
         #verify the message hash 
         buff = message.message
@@ -607,19 +625,19 @@ class DiscoveryProtocol:
             
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting and parsing data : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting and parsing data : {e}")
             return None
         #verify the message signature
         if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(pk)) == False:
             if self.parent.DEBUG:
-                rospy.loginfo("signature not verified")
+                loginfo(f"{self.parent.node_id}: signature not verified")
             return None
         #parse the message
         decrypted_data = json.loads(decrypted_data)
         #check if the message counter is valid
         if decrypted_data["counter"] <= session["counter"]:
             if self.parent.DEBUG:
-                rospy.loginfo("counter not valid")
+                loginfo(f"{self.parent.node_id}: counter not valid")
             return None
         
         #validate the message
@@ -628,7 +646,7 @@ class DiscoveryProtocol:
             message=ApprovalResponseMessage(message.message)
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error validating message : {e}")
+                loginfo(f"{self.parent.node_id}: error validating message : {e}")
             return None
         
         
@@ -637,11 +655,11 @@ class DiscoveryProtocol:
             decrypted_test = EncryptionModule.decrypt_symmetric(decrypted_data["data"]["test_message"],session["key"])
             if decrypted_test != "server_test":
                 if self.parent.DEBUG:
-                    rospy.loginfo("test message not decrypted")
+                    loginfo(f"{self.parent.node_id}: test message not decrypted")
                 return None
         except Exception as e:
             if self.parent.DEBUG:
-                rospy.loginfo(f"error decrypting test message : {e}")
+                loginfo(f"{self.parent.node_id}: error decrypting test message : {e}")
             return None
         
         #get the session id
