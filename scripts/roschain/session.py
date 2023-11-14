@@ -3,7 +3,7 @@ from time import mktime
 from datetime import datetime
 from random import choices
 from string import ascii_uppercase, digits
-from multirobot_sim.srv import FunctionCall, FunctionCallRequest, FunctionCallResponse
+from multirobot_sim.srv import FunctionCall, FunctionCallResponse
 import json
 import rospy
 class SessionManager:
@@ -14,10 +14,10 @@ class SessionManager:
         #self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
         self.node_states = OrderedDict()
         self.node = rospy.init_node("session_manager", anonymous=True)
-        self.server = rospy.Service('call', FunctionCall, self.handle_function_call)
         self.node_id = node_id
         self.refresh_node_state_table()
         self.node_id = node_id
+        self.server = rospy.Service('call', FunctionCall, self.handle_function_call)
         
     def handle_function_call(self,req):
         #get function name and arguments from request
@@ -26,7 +26,13 @@ class SessionManager:
         if type(args) is not list:
             args = [args]
         #call function
-        response = getattr(self,function_name)(*args)
+        if hasattr(self,function_name):
+            if len(args) == 0:
+                response = getattr(self,function_name)()
+            else:
+                response = getattr(self,function_name)(*args)
+        else:
+            response = None
         if response is None:
             response = FunctionCallResponse(r'{}')
         else:
