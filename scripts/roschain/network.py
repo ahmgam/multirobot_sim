@@ -150,6 +150,6 @@ if __name__ == "__main__":
     while not is_shutdown():
         if not network.queue.empty():
             messae = network.queue.get()
-            network.send_message(messae)
+            network.send_message(*messae)
         rate.sleep()
    

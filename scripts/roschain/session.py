@@ -151,6 +151,9 @@ class SessionManager:
                 continue
             else:
                 self.node_states[value["node_id"]] = {"pk":value["pk"],"last_active":mktime(datetime.datetime.now().timetuple())}
+                
+    def get_connection_sessions(self):
+        return self.connection_sessions
 
 if __name__ == "__main__":
     ns = rospy.get_namespace()
