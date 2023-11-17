@@ -2,6 +2,7 @@
 from queue import Queue
 import json
 import rospy
+from std_msgs import String
 from paho.mqtt import client as mqtt_client
 from collections import OrderedDict
 class MQTTCommunicationModule:
@@ -17,6 +18,9 @@ class MQTTCommunicationModule:
         self.__init_mqtt()
         self.counter = 0
         self.timeout = 5
+        self.node = rospy.init_node('connector', anonymous=True)
+        self.publisher = rospy.Publisher('main_handler', String, queue_size=10)
+        self.subscriber = rospy.Subscriber('send_message', String, self.callback)
 
     def __init_mqtt(self):
         self.client = mqtt_client.Client(self.node_id)
@@ -31,9 +35,11 @@ class MQTTCommunicationModule:
         except Exception as e:
             rospy.loginfo(f"{self.node_id}: Error connecting to MQTT: {e}")
             return
+    def callback(self, data):
+        self.send(json.loads(data.data))
 
     def on_message(self, client, userdata, message):
-        self.buffer.put({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"})
+        self.publisher.publish(json.dumps({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"}))
 
     def on_connect(self, client, userdata, flags, rc):
         rospy.loginfo(f"{self.node_id}: Connected with result code " + str(rc))
@@ -72,3 +78,34 @@ class MQTTCommunicationModule:
     def is_available(self):
         self.client.loop_read()
         return not self.buffer.empty()
+    
+if __name__ == '__main__':
+    ns = rospy.get_namespace()
+    
+    try :
+        node_id= rospy.get_param(f'{ns}/connector/node_id') # node_name/argsname
+        rospy.loginfo(f"connector: Getting node_id argument, and got : {node_id}")
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_id")
+    
+    try :
+        endpoint= rospy.get_param(f'{ns}/connector/endpoint') # node_name/argsname
+        rospy.loginfo(f"connector: Getting endpoint argument, and got : {endpoint}")
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : endpoint")
+    
+    try :
+        port= rospy.get_param(f'{ns}/connector/port') # node_name/argsname
+        rospy.loginfo(f"connector: Getting port argument, and got : {port}")
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : port")
+    
+    try:
+        auth = rospy.get_param(f'{ns}/connector/auth') # node_name/argsname
+        rospy.loginfo(f"connector: Getting auth argument, and got : {auth}")
+    except:
+        auth = None
+        rospy.loginfo(f"connector: Getting auth argument, and got : {auth}")
+    
+    node = MQTTCommunicationModule(node_id,endpoint,port,auth)
+    rospy.spin()

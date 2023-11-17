@@ -1,0 +1,117 @@
+
+#################################
+# Encryption Module
+################################
+import rsa
+import os
+from cryptography.fernet import Fernet
+import json
+from rospy import Service,init_node,get_namespace,get_param,ROSInterruptException,spin
+from multirobot_sim.srv import FunctionCall,FunctionCallResponse
+
+class EncryptionManager:
+    
+    @staticmethod
+    def generate_keys():
+        '''
+        generate new public and private key pair
+        '''
+        
+        #generate new public and private key pair
+        pk, sk=rsa.newkeys(2048)
+        return pk, sk
+    
+    @staticmethod
+    def store_keys(public_key_file,private_key_file,pk,sk):
+        '''
+        store public and private key pair in file
+        '''
+        
+        #store public and private key pair in file
+        # Save the public key to a file
+        with open(public_key_file, 'wb') as f:
+            f.write(pk.save_pkcs1())
+
+        # Save the private key to a file
+        with open(private_key_file, 'wb') as f:
+            f.write(sk.save_pkcs1())
+        return None
+    
+    @staticmethod
+    def load_keys(pk_file,sk_file):
+        '''
+        load public and private key pair from file
+        '''
+        #check if key pairs is available
+        if os.path.isfile(pk_file) and os.path.isfile(sk_file):
+            #load public and private key pair from file
+            with open(pk_file, 'rb') as f:
+                pk = rsa.PublicKey.load_pkcs1(f.read())
+            with open(sk_file, 'rb') as f:
+                sk = rsa.PrivateKey.load_pkcs1(f.read())
+            return pk, sk
+        else:        
+            return None, None
+        
+        
+    @staticmethod
+    def format_public_key(pk):
+        #remove new line characters
+        pk = str(pk.save_pkcs1().decode('ascii'))
+        pk = pk.replace('\n-----END RSA PUBLIC KEY-----\n', '').replace('-----BEGIN RSA PUBLIC KEY-----\n','')
+        return pk
+    
+    @staticmethod
+    def format_private_key(sk):
+        # Convert the byte string to a normal string
+        sk = str(sk.save_pkcs1()).decode('ascii')
+        # Remove the new line characters and the header and footer
+        sk = sk.replace('\n-----END RSA PRIVATE KEY-----\n', '').replace('-----BEGIN RSA PRIVATE KEY-----\n','')
+        return sk
+        
+    @staticmethod
+    def reformat_public_key(pk):
+        return f"-----BEGIN RSA PUBLIC KEY-----\n{str(pk)}\n-----END RSA PUBLIC KEY-----\n"
+       
+    @staticmethod 
+    def generate_symmetric_key():
+        return Fernet.generate_key().decode("ascii")
+         
+    def __init__(self, public_key_file, private_key_file):
+        self.public_key_file = public_key_file
+        self.private_key_file = private_key_file
+        self.pk, self.sk = self.load_keys(public_key_file, private_key_file)
+        if self.pk is None or self.sk is None:
+            self.pk, self.sk = self.generate_keys()
+            self.store_keys(public_key_file, private_key_file, self.pk, self.sk)
+        self.node = init_node("key_store", anonymous=True)
+        self.server = Service('call', FunctionCall, self.handle_function_call)
+        
+
+    def get_rsa_key(self):
+        return {
+            "pk": self.format_public_key(self.pk),
+            "sk": self.format_private_key(self.sk)
+        }
+        
+    def handle_function_call(self, req):
+        if req.function_name == "get_rsa_key":
+            return FunctionCallResponse(json.loads(self.get_rsa_key()))
+        else:
+            return FunctionCallResponse(r"{}")
+        
+if __name__ == "__main__":
+    ns = get_namespace()
+    try :
+        public_key_file= get_param(f'{ns}/roschain/public_key_file') # node_name/argsname
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : public_key_file")
+    
+    try:
+        private_key_file= get_param(f'{ns}/roschain/private_key_file') # node_name/argsname
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : private_key_file")
+    
+    network = EncryptionManager(public_key_file,private_key_file)
+    spin()
+    

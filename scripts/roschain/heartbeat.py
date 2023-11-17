@@ -3,7 +3,8 @@ from encryption import EncryptionModule
 import datetime
 import json
 from time import mktime
-from rospy import loginfo,ServiceProxy
+from rospy import loginfo,ServiceProxy,init_node,Publisher
+from std_msgs.msg import String
 from multirobot_sim.srv import FunctionCall
 class HeartbeatProtocol:
     
@@ -13,14 +14,23 @@ class HeartbeatProtocol:
         self.DEBUG = DEBUG
         #define heartbeat interval
         self.heartbeat_interval = 5
+        #define node
+        self.node = init_node("heartbeat_protocol", anonymous=True)
         #define sessions
-        self.sessions = ServiceProxy('sessions', FunctionCall)
+        self.sessions = ServiceProxy('sessions/call', FunctionCall)
         #define blockchain
-        self.blockchain = ServiceProxy('blockchain', FunctionCall)
+        self.blockchain = ServiceProxy('blockchain/call', FunctionCall)
+        #define key store proxy
+        self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        #messsage publisher
+        self.publisher = Publisher('send_message', String, queue_size=10)
         #define last heartbeat
         self.last_call = mktime(datetime.datetime.now().timetuple())
-        
-    
+        #get public and private key 
+        keys  = self.make_function_call(self.key_store,"get_rsa_key")
+        self.pk = keys["pk"]
+        self.sk = keys["sk"]
+           
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
         response = service(function_name,args).response
@@ -79,14 +89,13 @@ class HeartbeatProtocol:
         #serialize message
         msg_data= json.dumps(payload)
         #get message hash and signature
-        msg_signature = EncryptionModule.sign(msg_data,self.parent.sk)
+        msg_signature = EncryptionModule.sign(msg_data,self.sk)
         #add hash and signature to message
         payload["signature"] = msg_signature
         #send message
-        self.parent.queues.put_queue({"target": session["node_id"],
+        self.publisher.publish(json.dumps([{"target": session["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
-                                      "message": payload,
-                                      "pos": self.parent.pos},"outgoing")
+                                      "message": payload},"outgoing"]))
            
     def handle_heartbeat(self,message):
         #receive heartbeat from node
@@ -153,14 +162,13 @@ class HeartbeatProtocol:
         #serialize message
         msg_data= json.dumps(payload)
         #get message hash and signature
-        msg_signature = EncryptionModule.sign(msg_data,self.parent.sk)
+        msg_signature = EncryptionModule.sign(msg_data,self.sk)
         #add hash and signature to message
         payload["signature"] = msg_signature
         #send message
-        self.parent.queues.put_queue({"target": session["node_id"],
+        self.publisher.publish(json.dumps([{"target": session["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
-                                      "message": payload,
-                                      "pos": self.parent.pos},"outgoing")
+                                      "message": payload},"outgoing"]))
  
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node

@@ -35,7 +35,7 @@ class NetworkInterface:
         #define server
         self.server = Service('call', FunctionCall, self.handle_function_call)
         #define sessions service proxy
-        self.sessions = ServiceProxy('sessions', FunctionCall)
+        self.sessions = ServiceProxy('sessions/call', FunctionCall)
         #define is_initialized
         
     def handle_function_call(self,req):
@@ -59,7 +59,12 @@ class NetworkInterface:
             response = FunctionCallResponse(response)
         return response
      
-
+    def make_function_call(self,service,function_name,*args):
+        args = json.dumps(args)
+        response = service(function_name,args).response
+        if response == r"{}":
+            return None
+        return json.loads(response)
     def verify_data(self,message):
         #get session
         session = self.sessions("get_connection_sessions",json.dumps([message.message["session_id"]]))
@@ -109,7 +114,6 @@ class NetworkInterface:
             #prepare message data
             msg_data = OrderedDict({
             "timestamp": str(datetime.datetime.now()),
-                "counter": self.comm.counter,
                 "data":message
                 })
             #stringify message data

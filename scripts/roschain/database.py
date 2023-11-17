@@ -1,240 +1,101 @@
-
-####################################
-# Database module
-###################################
-
-import json
+#!/usr/bin/env python
+import sqlite3
+from multirobot_sim.srv import DatabaseQuery, DatabaseQueryResponse
+from queue import Queue
+import random
+import string
 import rospy
-from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest
-
+import json
+from time import sleep
 class Database (object):
-    def __init__(self,node_id):
+    def __init__(self, node_id,path,schema=None):
         #self.working = False
+        self.node = rospy.init_node("database", anonymous=True)
         self.node_id = node_id
-        self.query_client = rospy.ServiceProxy(f"{self.node_id}/query", DatabaseQuery)
-        self.query_client.wait_for_service()
-        self.tabels = self.__get_db_meta()
-        
+        self.connection = sqlite3.connect(f"{path}/{node_id}.sqlite3", check_same_thread=False)
+        self.connection.row_factory = Database.dict_factory
+        self.input_queue = Queue()
+        self.output_queue = Queue()
+        self.query_service = rospy.Service(f"{node_id}/query", DatabaseQuery, self.query_handler)
+        if schema:
+            with open(schema) as f:
+                self.connection.executescript(f.read())
+        self.data = {}
 
-    def __get_db_meta(self):
-        cols = self.query("""
-        SELECT 
-        m.name as table_name, 
-        p.name as column_name,
-        p.type as column_type,
-        p.'notnull' as not_null
-        FROM 
-        sqlite_master AS m
-        JOIN 
-        pragma_table_info(m.name) AS p
-        WHERE
-        m.type = 'table' 
-        ORDER BY 
-        m.name, 
-        p.cid
-        """)
-        tabels = {table_name : {"name":table_name,"columns":{}} for table_name in set([col['table_name'] for col in cols])}
-        # add columns to tabels
-        for col in cols:
-            tabels[col['table_name']]["columns"][col['column_name']]=({"name":col['column_name'],"type":col['column_type'], "not_null":col['not_null']})
-
-        #remove sqlite_sequence table
-        tabels.pop("sqlite_sequence",None)
-        #replace type with python type
-        for table_name,table_content in tabels.items():
-            for column in table_content["columns"].values():
-                if column["type"] == "INTEGER":
-                    tabels[table_name]["columns"][column["name"]]["type"] = int
-                elif column["type"] == "REAL":
-                    tabels[table_name]["columns"][column["name"]]["type"] =float
-                elif column["type"] == "TEXT":
-                    tabels[table_name]["columns"][column["name"]]["type"] = str
-                elif column["type"] == "BLOB":
-                    tabels[table_name]["columns"][column["name"]]["type"] = bytes
+    def query(self, query, args=()):   
+     
+        self.working = True
+        with self.connection:
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(query, args)
+                #self.connection.commit()  
+                if query.startswith('INSERT') is True or query.startswith('UPDATE') is True or query.startswith('DELETE') is True:
+                    ret = cursor.lastrowid ,[]
                 else:
-                    raise Exception("Column type not supported")
-        return tabels
-
-    def __table_exists(self,table_name):
-        return table_name in self.tabels.keys()
+                    ret = 0,cursor.fetchall()
+            except Exception as e:
+                rospy.loginfo(f"Error executing query, Query : {query} , Error : {e}")
+                ret = 0,[]
+        return ret
     
-    def __column_exists(self,table_name,column_name):
-        return column_name in self.tabels[table_name]["columns"].keys() or column_name=="*"
+    def query_handler(self,req):
+        op_id = self.generate_random_str()
+        self.input_queue.put(op_id)
+        self.data[op_id]= {"query":req.query,"result":None}
+        while not self.is_ready(op_id):
+            pass
+        return DatabaseQueryResponse(*self.data[op_id]["result"])
     
-    def __check_fields_format(self,fields):
-        if not type(fields) in [list,tuple]:
-            raise Exception("Column must be a list or tuple")
-        if len(fields) != 2:
-            raise Exception("Column must have 2 elements")
-
-    def __check_condition_format(self,conditions):
-        if not type(conditions) in [list,tuple]:
-            raise Exception("Column must be a list or tuple")
-        if len(conditions) != 3:
-            raise Exception("Column must have 3 elements")
-         
-    def __check_column_options(self,column):
-        if not column[1] in ["==",">=","<=",">","<","!=","LIKE","NOT LIKE","IN","NOT IN","IS","IS NOT","BETWEEN","NOT BETWEEN","NULL","NOT NULL"]:
-            raise Exception("Column type not supported")
+    @staticmethod
+    def dict_factory(cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        r = json.dumps(d)
+        return r
         
-    def __check_column_type(self,table,column,value):
-        if not type(value) in [int,float,str,bytes,bool,None]:
-            raise Exception(f"Column type not supported : {type(value)}")
-        if str(value).isnumeric():
-            return
-        if not type(value) == self.tabels[table]["columns"][column]["type"]:
-            raise Exception(f"Wrong data type for {column} ,data type : {type(value)} , expected : {self.tabels[table]['columns'][column]['type']}")
-        
-    def insert(self,table_name,*keywords):
-        #check if table exists
-        if not self.__table_exists(table_name):
-            raise Exception(f"Table does not exists : {table_name}")
-        #check if fields format is valid
-        for keyword in keywords:
-            self.__check_fields_format(keyword)
-        #check if fields are valid
-        for keyword,value in keywords:
-            if not self.__column_exists(table_name,keyword):
-                raise Exception(f"Column does not exists : {keyword}")
-            self.__check_column_type(table_name,keyword,value)
-
-        #build query
-        query = "INSERT INTO {table} ({keywords}) VALUES ({values})".format(
-            table=table_name,keywords=",".join(keyword[0] for keyword in keywords),
-            values=",".join(str(keyword[1]) if type(keyword[1]) != str else f"'{keyword[1]}'" for keyword in keywords))
-            
-        #execute query
-        self.query(query)
-       
-        return 
-        
-    def flush(self):
-        for table_name in self.tabels.keys():
-            self.query(f"DROP TABLE IF EXISTS {table_name}")
-
-    def select(self,table_name,fields,*conditions):
-        
-        #check if table exists
-        if not self.__table_exists(table_name):
-            raise Exception(f"Table does not exists : {table_name}")
-        #check if fields exists
-        if type(fields) == str:
-            fields = [fields]
-        for field in fields:
-            if not self.__column_exists(table_name,field):
-                raise Exception(f"Column does not exists : {field}")
-        #check if conditions are valid
-        for condition in conditions:
-            self.__check_condition_format(condition)
-            if not self.__column_exists(table_name,condition[0]):
-                raise Exception(f"Column does not exists : {condition[0]}")
-            self.__check_column_options(condition)
-            self.__check_column_type(table_name,condition[0],condition[2])
-       
-        #build query
-        query = "SELECT {fields} FROM {table} {options}".format(
-            fields=",".join(fields),table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" if type(condition[2]) != str else f"{condition[0]} {condition[1]} '{condition[2]}'" for condition in conditions]) if len(conditions) > 0  else ""
-            )
-     
-        return self.query(query)
+    def generate_random_str(self):
+        return ''.join(random.choice(string.ascii_letters) for _ in range(10))
     
-    def delete(self,table_name,*conditions):
-
-        #check if table exists
-        if not self.__table_exists(table_name):
-            raise Exception(f"Table does not exists : {table_name}")
-
-        #check if conditions are valid
-        for condition in conditions:
-            self.__check_condition_format(condition)
-            if not self.__column_exists(table_name,condition[0]):
-                raise Exception(f"Column does not exists : {condition[0]}")
-            self.__check_column_options(condition)
-            self.__check_column_type(table_name,condition[0],condition[2])
-
-        #build query
-        query = "DELETE FROM {table} {options}".format(
-            table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
-            )
-        #execute query
-        return self.query(query)
+    def is_ready(self,op_id):
+        if op_id in self.output_queue.queue:
+            return True
+        return False
     
-    def update(self,table_name,*conditions,**keyword):
-
-        #check if table exists
-        if not self.__table_exists(table_name):
-            raise Exception(f"Table does not exists : {table_name}")
-        #check if conditions are valid
-        for condition in conditions:
-            self.__check_condition_format(condition)
-            if not self.__column_exists(table_name,condition[0]):
-                raise Exception(f"Column does not exists : {condition[0]}")
-            self.__check_column_options(condition)
-            self.__check_column_type(table_name,condition[0],condition[2])
-        #check keywords
-        for key,value in keyword.items():
-            if not self.__column_exists(table_name,key):
-                raise Exception(f"Column does not exists : {key}")
-            self.__check_column_type(table_name,key,value)
-
-        #build query
-        query = "UPDATE {table} SET {keywords} {options}".format(
-            table=table_name,
-            keywords=",".join([f"{key} = {value}" for key,value in keyword.items()]),
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
-            )
-        #rospy.loginfo(query)
-        #execute query
-        return self.query(query)
+    def loop(self):
+        #get input request 
+        while not self.input_queue.empty():
+            op_id = self.input_queue.get()
+            query = self.data[op_id]["query"]
+            #execute query
+            self.data[op_id]["result"] = self.query(query)
+            #put output request 
+            self.output_queue.put(op_id)
+            sleep(0.1)
+        return
     
-    def count(self,table_name,*conditions):
-        
-        #check if table exists
-        if not self.__table_exists(table_name):
-            raise Exception(f"Table does not exists : {table_name}")
-        #check if conditions are empty
-        if not conditions:
-            return self.query(f"SELECT COUNT(*) FROM {table_name}")
-        #check if conditions are valid
-        for condition in conditions:
-            self.__check_condition_format(condition)
-            if not self.__column_exists(table_name,condition[0]):
-                raise Exception(f"Column does not exists : {condition[0]}")
-            self.__check_column_options(condition)
-            self.__check_column_type(table_name,condition[0],condition[2])
-       
-        #build query
-        query = "SELECT COUNT(*) FROM {table} {options}".format(
-            table=table_name,
-            options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
-            )
-        #execute query
-        return self.query(query)
- 
-    def get_last_id(self,table_name):
-        #check if table exists
-        if not self.__table_exists(table_name):
-            raise Exception(f"Table does not exists : {table_name}")
-        #check if table is empty
-        if not self.query(f"SELECT * FROM {table_name}"):
-            return 0
-        return self.query(f"SELECT MAX(id) FROM '{table_name}'")[0]['MAX(id)']
-         
-    def query(self, query):   
-     
-        result = self.query_client(DatabaseQueryRequest(query))
-        data = []
-        if result.id == 0:
-            data = []
-            for i in range(len(result.output)):
-                #parse json without raising exception
-                data.append(json.loads(result.output[i],strict=False))
-            return data
-        else:
-            return result.id
-        
+if __name__ == "__main__":
+    ns = rospy.get_namespace()
+    try :
+        node_id= rospy.get_param(f'{ns}/database/node_id') # node_name/argsname
+        rospy.loginfo("Database: Getting node_id argument, and got : ", node_id)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_id")
+
+    try :
+        db_dir= rospy.get_param(f'{ns}/database/db_dir') # node_name/argsname
+        rospy.loginfo("Database: Getting db_dir argument, and got : ", db_dir)
+
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : db_dir")
     
-    def update_db_meta(self):
-        self.tabels = self.__get_db_meta()
+    schema= rospy.get_param(f'{ns}/database/schema',None) # node_name/argsname
+    rospy.loginfo("Database: Getting shcema argument, and got : ", schema)
+
+    
+    
+    database = Database(node_id,db_dir,schema)
+    while not rospy.is_shutdown():
+        database.loop()
