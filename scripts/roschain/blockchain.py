@@ -5,8 +5,8 @@ from collections import OrderedDict
 from time import mktime
 from database import Database
 from encryption import EncryptionModule
-from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest
-
+from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest,FunctionCall
+from std_msgs.msg import String
 
 ####################################
 # Database module
@@ -247,26 +247,42 @@ class Database (object):
 
 class Blockchain:
     #initialize the blockchain
-    def __init__(self,parent):
+    def __init__(self,node_id,node_type,DEBUG=False):
         
-        #define parent
-        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing")
-        self.parent = parent
+        #node id
+        self.node_id = node_id
+        #node type
+        self.node_type = node_type
+        #debug mode
+        self.DEBUG = DEBUG
+        rospy.loginfo(f"{node_id}: blockchain: Initializing")
+        node = rospy.init_node("blochchain",anonymous=True)
+        #init sessions
+        self.sessions = rospy.ServiceProxy("sessions/call",FunctionCall)
+        #init network 
+        self.network = rospy.ServiceProxy("network/call",FunctionCall)
+        #message publisher
+        self.publisher = rospy.Publisher("send_message",String,queue_size=10)
         # define database manager
-        self.db = Database(self.parent.node_id)
-        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing database")
+        self.db = Database(self.node_id)
+        rospy.loginfo(f"{node_id}: blockchain: Initializing database")
         # create tables
         self.create_tables()
         # define queue for storing data
-        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing queue")
+        rospy.loginfo(f"{node_id}: blockchain: Initializing queue")
         self.genesis_block()
         #sync timeout
-        rospy.loginfo(f"{parent.node_id}: blockchain: Initializing sync timeout")
+        rospy.loginfo(f"{node_id}: blockchain: Initializing sync timeout")
         self.sync_timeout = 10
         #sync views
         self.views = OrderedDict()
         
- 
+    def make_function_call(self,service,function_name,*args):
+        args = json.dumps(args)
+        response = service(function_name,args).response
+        if response == r"{}":
+            return None
+        return json.loads(response)
     ############################################################
     # Database tabels
     ############################################################
@@ -392,7 +408,7 @@ class Blockchain:
         time_created = datetime.datetime.fromtimestamp(time).strftime("%Y-%m-%d %H:%M:%S") if type(time) == float else time
         self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",time_created))
         #sending log info 
-        self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
+        #self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
         return item_id
 
     def add_block(self,transactions):
@@ -553,8 +569,8 @@ class Blockchain:
             if mktime(datetime.datetime.now().timetuple()) - view['last_updated'] > self.sync_timeout and view['status'] == "pending":
                 #evaluate the view
                 self.evaluate_sync_view(view_id)
-                if self.parent.DEBUG:
-                    rospy.loginfo(f"{self.parent.node_id}: View {view_id} timed out, starting evaluation")
+                if self.DEBUG:
+                    rospy.loginfo(f"{self.node_id}: View {view_id} timed out, starting evaluation")
               
     def check_sync(self,last_conbined_hash, record_count):
         #check if all input is not null 
@@ -639,10 +655,10 @@ class Blockchain:
             "last_record":last_record,
             "number_of_records":number_of_records,
             "view_id":view_id,
-            "source":self.parent.node_id
+            "source":self.node_id
         }
         #send the sync request to other nodes
-        self.parent.network.send_message('all',msg)
+        self.make_function_call(self.network,"send_message",'all',msg)
 
     #handle sync request from other nodes
     def handle_sync_request(self,msg):
@@ -660,9 +676,9 @@ class Blockchain:
                 "number_of_records":number_of_records,
                 "sync_data":self.get_sync_data(last_record,number_of_records),
                 "view_id":view_id,
-                "source":self.parent.node_id
+                "source":self.node_id
             }
-            self.parent.network.send_message(node_id,msg)
+            self.make_function_call(self.network,"send_message",node_id,msg)
  
     def handle_sync_reply(self,msg):
         #check if the view exists
@@ -671,26 +687,26 @@ class Blockchain:
             #if it does, then add the sync data to the view
             self.views[view_id]["sync_data"].append(msg["message"]["data"]["sync_data"])
             #check if the number of sync data is equal to the number of nodes
-            if len(self.views[view_id]["sync_data"]) == len(self.parent.sessions.get_connection_sessions()):
+            if len(self.views[view_id]["sync_data"]) == len(self.make_function_call(self.sessions,"get_connection_sessions")):
                 self.evaluate_sync_view(view_id)
         else:
-            rospy.loginfo(f"{self.parent.node_id}: view does not exist")
+            rospy.loginfo(f"{self.node_id}: view does not exist")
 
     def evaluate_sync_view(self,view_id):
         #check if the view exists
         if view_id not in self.views.keys():
-            rospy.loginfo(f"{self.parent.node_id}: view does not exist")
+            rospy.loginfo(f"{self.node_id}: view does not exist")
             return
         #check if the view is complete
         if self.views[view_id]["status"] != "pending":
             return
         #check if the number of sync data is more than half of the nodes
-        active_nodes = len(self.parent.sessions.get_active_nodes())
+        active_nodes = len(self.make_function_call(self.sessions,"get_active_nodes"))
         participating_nodes = len(self.views[view_id]['sync_data'])
         print(f"number of sync data : {participating_nodes}")
         print(f"number of nodes : {active_nodes}")
         if len(self.views[view_id]["sync_data"]) < active_nodes//2:
-            rospy.loginfo(f"{self.parent.node_id}: not enough sync data")
+            rospy.loginfo(f"{self.node_id}: not enough sync data")
             #mark the view as incomplete
             self.views[view_id]["status"] = "incomplete"
             return

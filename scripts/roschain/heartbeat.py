@@ -3,7 +3,7 @@ from encryption import EncryptionModule
 import datetime
 import json
 from time import mktime
-from rospy import loginfo,ServiceProxy,init_node,Publisher
+from rospy import loginfo,ServiceProxy,init_node,Publisher,get_namespace,spin,get_param,ROSInterruptException
 from std_msgs.msg import String
 from multirobot_sim.srv import FunctionCall
 class HeartbeatProtocol:
@@ -215,3 +215,21 @@ class HeartbeatProtocol:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Un synced blockchain, sending sync request")
             self.make_function_call(self.blockchain,"send_sync_request")    
+            
+if __name__ == '__main__':
+    ns = get_namespace()
+    
+    try :
+        node_id= get_param(f'{ns}/discovery/node_id') # node_name/argsname
+        loginfo(f"discovery: Getting node_id argument, and got : {node_id}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : node_id")
+    
+    try :
+        node_type= get_param(f'{ns}/discovery/node_type') # node_name/argsname
+        loginfo(f"discovery: Getting endpoint argument, and got : {node_type}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : node_type")
+    
+    node = HeartbeatProtocol(node_id,node_type,DEBUG=True)
+    spin()
