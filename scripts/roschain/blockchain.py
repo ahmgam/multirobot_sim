@@ -1,12 +1,13 @@
 import json
 import datetime
-import rospy
+from rospy import spin,loginfo,init_node,ServiceProxy,Publisher,Service,get_namespace,get_param,ROSInterruptException
 from collections import OrderedDict
 from time import mktime
 from database import Database
 from encryption import EncryptionModule
-from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest,FunctionCall
+from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest,FunctionCall,FunctionCallResponse
 from std_msgs.msg import String
+from queues import OrderedQueue
 
 ####################################
 # Database module
@@ -17,7 +18,7 @@ class Database (object):
     def __init__(self,node_id):
         #self.working = False
         self.node_id = node_id
-        self.query_client = rospy.ServiceProxy(f"{self.node_id}/query", DatabaseQuery)
+        self.query_client = ServiceProxy(f"{self.node_id}/query", DatabaseQuery)
         self.query_client.wait_for_service()
         self.tabels = self.__get_db_meta()
         
@@ -191,7 +192,7 @@ class Database (object):
             keywords=",".join([f"{key} = {value}" for key,value in keyword.items()]),
             options="WHERE "+" AND ".join([f"{condition[0]} {condition[1]} {condition[2]}" for condition in conditions]) if conditions else ""
             )
-        #rospy.loginfo(query)
+        #loginfo(query)
         #execute query
         return self.query(query)
     
@@ -247,7 +248,7 @@ class Database (object):
 
 class Blockchain:
     #initialize the blockchain
-    def __init__(self,node_id,node_type,DEBUG=False):
+    def __init__(self,node_id,node_type,seed,DEBUG=False):
         
         #node id
         self.node_id = node_id
@@ -255,27 +256,33 @@ class Blockchain:
         self.node_type = node_type
         #debug mode
         self.DEBUG = DEBUG
-        rospy.loginfo(f"{node_id}: blockchain: Initializing")
-        node = rospy.init_node("blochchain",anonymous=True)
+        #seed of the blockchain
+        self.seed = seed
+        loginfo(f"{node_id}: blockchain: Initializing")
+        node = init_node("blochchain",anonymous=True)
         #init sessions
-        self.sessions = rospy.ServiceProxy("sessions/call",FunctionCall)
+        self.sessions = ServiceProxy("sessions/call",FunctionCall)
         #init network 
-        self.network = rospy.ServiceProxy("network/call",FunctionCall)
+        self.network = ServiceProxy("network/call",FunctionCall)
         #message publisher
-        self.publisher = rospy.Publisher("send_message",String,queue_size=10)
+        self.publisher = Publisher("send_message",String,queue_size=10)
+        #define blockchain service
+        self.server = Service("call",FunctionCall,self.handle_function_call)
         # define database manager
         self.db = Database(self.node_id)
-        rospy.loginfo(f"{node_id}: blockchain: Initializing database")
+        loginfo(f"{node_id}: blockchain: Initializing database")
         # create tables
         self.create_tables()
         # define queue for storing data
-        rospy.loginfo(f"{node_id}: blockchain: Initializing queue")
+        loginfo(f"{node_id}: blockchain: Initializing queue")
         self.genesis_block()
         #sync timeout
-        rospy.loginfo(f"{node_id}: blockchain: Initializing sync timeout")
+        loginfo(f"{node_id}: blockchain: Initializing sync timeout")
         self.sync_timeout = 10
         #sync views
         self.views = OrderedDict()
+        #queue 
+        self.queue = OrderedQueue()
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -283,6 +290,28 @@ class Blockchain:
         if response == r"{}":
             return None
         return json.loads(response)
+    
+
+    def handle_function_call(self,req):
+        #get function name and arguments from request
+        function_name = req.function_name
+        args = json.loads(req.args)
+        if type(args) is not list:
+            args = [args]
+        #call function
+        if hasattr(self,function_name):
+            if len(args) == 0:
+                response = getattr(self,function_name)()
+            else:
+                response = getattr(self,function_name)(*args)
+        else:
+            response = None
+        if response is None:
+            response = FunctionCallResponse(r'{}')
+        else:
+            response = json.dumps(response) if type(response) is not str else response
+            response = FunctionCallResponse(response)
+        return response
     ############################################################
     # Database tabels
     ############################################################
@@ -470,7 +499,7 @@ class Blockchain:
         
         if last_transaction_id is None:
             #add genesis transaction, get the hash of auth data
-            prev_hash = EncryptionModule.hash(json.dumps(self.parent.auth))
+            prev_hash = EncryptionModule.hash(json.dumps(self.seed))
         else:
             #get the hash of last transaction
             prev_hash = self.db.select("block",["combined_hash"],("id",'==',last_transaction_id))[0]["combined_hash"]
@@ -570,7 +599,7 @@ class Blockchain:
                 #evaluate the view
                 self.evaluate_sync_view(view_id)
                 if self.DEBUG:
-                    rospy.loginfo(f"{self.node_id}: View {view_id} timed out, starting evaluation")
+                    loginfo(f"{self.node_id}: View {view_id} timed out, starting evaluation")
               
     def check_sync(self,last_conbined_hash, record_count):
         #check if all input is not null 
@@ -690,12 +719,12 @@ class Blockchain:
             if len(self.views[view_id]["sync_data"]) == len(self.make_function_call(self.sessions,"get_connection_sessions")):
                 self.evaluate_sync_view(view_id)
         else:
-            rospy.loginfo(f"{self.node_id}: view does not exist")
+            loginfo(f"{self.node_id}: view does not exist")
 
     def evaluate_sync_view(self,view_id):
         #check if the view exists
         if view_id not in self.views.keys():
-            rospy.loginfo(f"{self.node_id}: view does not exist")
+            loginfo(f"{self.node_id}: view does not exist")
             return
         #check if the view is complete
         if self.views[view_id]["status"] != "pending":
@@ -706,7 +735,7 @@ class Blockchain:
         print(f"number of sync data : {participating_nodes}")
         print(f"number of nodes : {active_nodes}")
         if len(self.views[view_id]["sync_data"]) < active_nodes//2:
-            rospy.loginfo(f"{self.node_id}: not enough sync data")
+            loginfo(f"{self.node_id}: not enough sync data")
             #mark the view as incomplete
             self.views[view_id]["status"] = "incomplete"
             return
@@ -732,3 +761,27 @@ class Blockchain:
         #change the status of the view
         self.views[view_id]["status"] = "complete"
 
+if __name__ == "__main__":
+    #get namespace 
+    ns = get_namespace()
+    try :
+        node_id= get_param(f'{ns}/dummy_transactions/node_id') # node_name/argsname
+        loginfo(f"dummy_transactions: Getting node_id argument, and got : {node_id}")
+    except KeyError:
+        raise ROSInterruptException("Invalid arguments : node_id")
+    
+    try :
+        node_type= get_param(f'{ns}/dummy_transactions/node_type') # node_name/argsname
+        loginfo(f"dummy_transactions: Getting node_type argument, and got : {node_type}")
+    except KeyError:
+        raise ROSInterruptException("Invalid arguments : node_type")
+    
+    try :
+        seed = get_param(f'{ns}/dummy_transactions/seed') # node_name/argsname
+        loginfo(f"dummy_transactions: Getting seed argument, and got : {seed}")
+    except KeyError:
+        raise ROSInterruptException("Invalid arguments : seed")
+    
+    
+    node = Blockchain(node_id,node_type,seed,DEBUG=True)
+    spin()

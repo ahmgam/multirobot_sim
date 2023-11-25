@@ -154,6 +154,12 @@ class SessionManager:
                 
     def get_connection_sessions(self):
         return self.connection_sessions
+    
+    def get_node_state(self,node_id):
+        if node_id in self.node_states.keys():
+            return self.node_states[node_id]
+        else:
+            return None
 
 if __name__ == "__main__":
     ns = rospy.get_namespace()
