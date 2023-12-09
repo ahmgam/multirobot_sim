@@ -36,6 +36,12 @@ class NetworkInterface:
         self.server = Service('call', FunctionCall, self.handle_function_call)
         #define sessions service proxy
         self.sessions = ServiceProxy('sessions/call', FunctionCall)
+        #define key store proxy
+        self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        #get public and private key 
+        keys  = self.make_function_call(self.key_store,"get_rsa_key")
+        self.pk = keys["pk"]
+        self.sk = keys["sk"]
         #define is_initialized
         
     def handle_function_call(self,req):
@@ -66,29 +72,71 @@ class NetworkInterface:
             return None
         return json.loads(response)
     def verify_data(self,message):
-        #get session
-        session = self.sessions("get_connection_sessions",json.dumps([message.message["session_id"]]))
-        if not session:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid session")
-            return
+        #check if message has session id
+        if message.message["session_id"] is None: 
+            #the message has no session id, so it's discovery message
+            #verify the message hash 
+            buff = message.message
+            msg_signature = buff.pop('signature')
+            msg_data=buff
+            #check if message is string
+            if type(message.message["message"]) is  str:
+                #the message is a string, so it's encrypted discovery message
+                #check if the node does not have active discovery session with the sender
+                session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])     
+                #decrypt the message
+                try:
+                    decrypted_data = EncryptionModule.decrypt(message.message["message"],self.sk)
+                    #parse the message
+                    decrypted_data = json.loads(decrypted_data)
+                except Exception as e:
+                    if self.DEBUG:    
+                        loginfo(f"{self.node_id}: error decrypting and parsing data : {e}")
+                    return None
+                #validate the message
+                message.message["message"] = decrypted_data
+                if not session: 
+                    #check if public key in decrypted message
+                    if decrypted_data["data"].get("pk"):
+                        session = {"pk":decrypted_data["data"]["pk"]}
+                    else:
+                        if self.DEBUG:
+                            loginfo(f"{self.node_id}: public key not found in decrypted message")
+                        return None
+                
+            else:
+                #the message is not a string, so it's not encrypted discovery message
+                session = {"pk":message.message["message"]["data"]["pk"]}
+                return message.message
+            #verify the message signature
+            if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
+                if self.DEBUG:    
+                    loginfo(f"{self.node_id}: signature not verified")
+                return None
+        else:
+            #get session
+            session = self.sessions("get_connection_sessions",json.dumps([message.message["session_id"]]))
+            if not session:
+                if self.DEBUG:
+                    loginfo(f"{self.node_id}: Invalid session")
+                return
 
-        #decrypt message
-        try:
-            decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
-        except:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid key")
-            return
-        #validate message
-        message.message["message"] = json.loads(decrypted_msg)
-        #check counter
-        if message.message["message"]["counter"]<session["counter"]:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid counter")
-            return
-        
-        return message.message
+            #decrypt message
+            try:
+                decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
+            except:
+                if self.DEBUG:
+                    loginfo(f"{self.node_id}: Invalid key")
+                return
+            #validate message
+            message.message["message"] = json.loads(decrypted_msg)
+            #check counter
+            if message.message["message"]["counter"]<session["counter"]:
+                if self.DEBUG:
+                    loginfo(f"{self.node_id}: Invalid counter")
+                return
+            
+            return message.message
 
     def send_message(self, target, message):
         

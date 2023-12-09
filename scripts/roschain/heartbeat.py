@@ -24,6 +24,8 @@ class HeartbeatProtocol:
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
         #messsage publisher
         self.publisher = Publisher('send_message', String, queue_size=10)
+        #define network 
+        self.network = ServiceProxy("network/call",FunctionCall)
         #define last heartbeat
         self.last_call = mktime(datetime.datetime.now().timetuple())
         #get public and private key 
@@ -75,27 +77,9 @@ class HeartbeatProtocol:
             })
         #serialize message
         msg_data= json.dumps(msg_data)
-        #encrypt message
-        encrypted_msg = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
-        #create heartbeat message
-        payload = OrderedDict({
-            "session_id": session["session_id"],
-            "node_id": self.node_id,
-            "node_type": self.node_type,
-            "type": "heartbeat_request",
-            "time":mktime(datetime.datetime.now().timetuple()),
-            "message":encrypted_msg
-            })
-        #serialize message
-        msg_data= json.dumps(payload)
-        #get message hash and signature
-        msg_signature = EncryptionModule.sign(msg_data,self.sk)
-        #add hash and signature to message
-        payload["signature"] = msg_signature
-        #send message
-        self.publisher.publish(json.dumps([{"target": session["node_id"],
-                                      "time":mktime(datetime.datetime.now().timetuple()),
-                                      "message": payload},"outgoing"]))
+        #call network service
+        self.make_function_call(self.network,"send_message",session["node_id"],msg_data)
+        
            
     def handle_heartbeat(self,message):
         #receive heartbeat from node
@@ -147,28 +131,8 @@ class HeartbeatProtocol:
             })
         #serialize message
         msg_data= json.dumps(msg_data)
-        
-        #encrypt message
-        encrypted_msg = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
-        #create heartbeat message
-        payload = OrderedDict({
-            "session_id": session["session_id"],
-            "node_id": self.node_id,
-            "node_type":self.node_type,
-            "type": "heartbeat_response",
-            "time":mktime(datetime.datetime.now().timetuple()),
-            "message":encrypted_msg
-            })
-        #serialize message
-        msg_data= json.dumps(payload)
-        #get message hash and signature
-        msg_signature = EncryptionModule.sign(msg_data,self.sk)
-        #add hash and signature to message
-        payload["signature"] = msg_signature
-        #send message
-        self.publisher.publish(json.dumps([{"target": session["node_id"],
-                                      "time":mktime(datetime.datetime.now().timetuple()),
-                                      "message": payload},"outgoing"]))
+        #call network service
+        self.make_function_call(self.network,"send_message",session["node_id"],msg_data)
  
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node
