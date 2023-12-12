@@ -5,8 +5,8 @@ from encryption import EncryptionModule
 from math import ceil
 from time import mktime
 import datetime
-from rospy import loginfo,ServiceProxy,Publisher,Subscriber,init_node,get_namespace,get_param,ROSInterruptException
-from multirobot_sim.srv import FunctionCall
+from rospy import ServiceProxy,Publisher,Subscriber,Service,ROSInterruptException,Rate,init_node,get_namespace,get_param,loginfo,is_shutdown
+from multirobot_sim.srv import FunctionCall,FunctionCallResponse
 from std_msgs.msg import String
 from queue import Queue
 
@@ -40,6 +40,8 @@ class SBFT:
         self.subscriber = Subscriber("consensus_handler",String,self.handle_message)
         #define key store proxy
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        #define function call service
+        self.server = Service("call",FunctionCall,self.handle_function_call)
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]
@@ -62,6 +64,27 @@ class SBFT:
         if response == r"{}":
             return None
         return json.loads(response)
+    
+    def handle_function_call(self,req):
+        #get function name and arguments from request
+        function_name = req.function_name
+        args = json.loads(req.args)
+        if type(args) is not list:
+            args = [args]
+        #call function
+        if hasattr(self,function_name):
+            if len(args) == 0:
+                response = getattr(self,function_name)()
+            else:
+                response = getattr(self,function_name)(*args)
+        else:
+            response = None
+        if response is None:
+            response = FunctionCallResponse(r'{}')
+        else:
+            response = json.dumps(response) if type(response) is not str else response
+            response = FunctionCallResponse(response)
+        return response
     
     def handle_message(self,msg):
         #parese message as json
@@ -464,3 +487,29 @@ class SBFT:
         #generate view id
         return ''.join(choices(ascii_lowercase, k=length))
     
+if __name__ == "__main__":
+    #get namespace 
+    ns = get_namespace()
+    try :
+        node_id= get_param(f'{ns}/discovery/node_id') # node_name/argsname
+        loginfo(f"discovery: Getting node_id argument, and got : {node_id}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : node_id")
+    
+    try :
+        node_type= get_param(f'{ns}/discovery/node_type') # node_name/argsname
+        loginfo(f"discovery: Getting endpoint argument, and got : {node_type}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : node_type")
+    #define consensus
+    consensus = SBFT(node_id,node_type)
+  
+    rate = Rate(10)
+    #start cron
+    while not is_shutdown():
+        consensus.cron()
+        #check queue
+        if not consensus.queue.empty():
+            consensus.handle(consensus.queue.get())
+        rate.sleep()
+            

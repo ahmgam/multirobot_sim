@@ -340,6 +340,8 @@ class Blockchain:
         self.db.query(transaction_table_query)
         self.db.update_db_meta()
 
+    def get_last_id(self,table_name):
+        return self.db.get_last_id(table_name)
     ############################################################
     # blockchain operations
     ############################################################
