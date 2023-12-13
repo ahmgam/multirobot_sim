@@ -28,10 +28,16 @@ class NetworkInterface:
         self.node = init_node("network_interface", anonymous=True)
         #define queue
         self.queue = Queue()
-        #define subscriber
-        self.subscriber = Subscriber('prepare_message', String, self.handle_data)
-        #define publisher
+        #define connector subscriber
+        self.subscriber = Subscriber('handle_message', String, self.to_queue)
+        #define connector publisher
         self.publisher = Publisher('send_message', String, queue_size=10)
+        #define discovery publisher
+        self.discovery_publisher = Publisher('discovery_handler', String, queue_size=10)
+        #define heartbeat publisher
+        self.heartbeat_publisher = Publisher('heartbeat_handler', String, queue_size=10)
+        # Define consensus publisher
+        self.consensus_publisher = Publisher('consensus_handler', String, queue_size=10)
         #define server
         self.server = Service('call', FunctionCall, self.handle_function_call)
         #define sessions service proxy
@@ -64,6 +70,9 @@ class NetworkInterface:
             response = json.dumps(response) if type(response) is not str else response
             response = FunctionCallResponse(response)
         return response
+    
+    def to_queue(self,message):
+        self.queue.put(json.loads(message))
      
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -184,7 +193,28 @@ class NetworkInterface:
                 "time":mktime(datetime.datetime.now().timetuple()),
                 "message": msg_payload,
             },"outgoing"]))
-
+            
+    def handle_message(self, message):
+        #check message type
+        message =self.verify_data(message)
+        if not message:
+            if self.DEBUG:
+                loginfo(f"{self.node_id}: Invalid message")
+            return
+        #handle message                      
+        if message["node_id"]==self.node_id:
+            return
+        elif str(message["type"]).startswith("discovery"):
+            self.discovery_publisher.publish(json.dumps(message))
+        elif str(message["type"]).startswith("heartbeat"):
+            self.heartbeat_publisher.publish(json.dumps(message))
+        elif message["type"]=="data_exchange":
+            self.consensus_publisher.publish(json.dumps(message))
+        else:
+            if self.DEBUG:
+                loginfo(f"{self.node_id}: unknown message type {message['type']}")
+        
+    
 if __name__ == "__main__":
     ns = get_namespace()
     try :
@@ -202,6 +232,6 @@ if __name__ == "__main__":
     while not is_shutdown():
         if not network.queue.empty():
             messae = network.queue.get()
-            network.send_message(*messae)
+            network.handle_message(*messae)
         rate.sleep()
    

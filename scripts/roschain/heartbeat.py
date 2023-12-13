@@ -1,9 +1,10 @@
 from collections import OrderedDict
 from encryption import EncryptionModule
+from queue import Queue
 import datetime
 import json
 from time import mktime
-from rospy import loginfo,ServiceProxy,init_node,Publisher,get_namespace,spin,get_param,ROSInterruptException
+from rospy import loginfo,ServiceProxy,init_node,Publisher,get_namespace,spin,get_param,is_shutdown,Rate,ROSInterruptException,Subscriber
 from std_msgs.msg import String
 from multirobot_sim.srv import FunctionCall
 class HeartbeatProtocol:
@@ -22,6 +23,8 @@ class HeartbeatProtocol:
         self.blockchain = ServiceProxy('blockchain/call', FunctionCall)
         #define key store proxy
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        #define heartbeat subscriber
+        self.subscriber = Subscriber('heartbeat_handler', String, self.to_queue)
         #messsage publisher
         self.publisher = Publisher('send_message', String, queue_size=10)
         #define network 
@@ -32,6 +35,8 @@ class HeartbeatProtocol:
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]
         self.sk = keys["sk"]
+        #define queue
+        self.queue = Queue()
            
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -39,6 +44,9 @@ class HeartbeatProtocol:
         if response == r"{}":
             return None
         return json.loads(response)
+    
+    def to_queue(self,data):
+        self.queue.put(json.loads(data.data))
     
     def cron(self):
         #send heartbeat to all nodes
@@ -53,17 +61,17 @@ class HeartbeatProtocol:
                 self.make_function_call(self.sessions,"update_connection_session",session_id,session)
     def handle(self,message):
         
-        if message.message["type"] == "heartbeat_request":
+        if message["type"] == "heartbeat_request":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting handle_heartbeat")
             self.handle_heartbeat(message)
-        elif message.message["type"] == "heartbeat_response":
+        elif message["type"] == "heartbeat_response":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting handle_heartbeat_response")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting handle_heartbeat_response")
             self.handle_heartbeat_response(message)
         else:
             if self.DEBUG:
-                loginfo(f"{self.node_id}: unknown message type {message.message['type']}")
+                loginfo(f"{self.node_id}: unknown message type {message['type']}")
                 
     def send_heartbeat(self,session):
         
@@ -84,13 +92,13 @@ class HeartbeatProtocol:
     def handle_heartbeat(self,message):
         #receive heartbeat from node
         #get session
-        session = self.make_function_call(self.sessions,"get_connection_sessions",*message.message["session_id"])
+        session = self.make_function_call(self.sessions,"get_connection_sessions",*message["session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid session")
             return
         #get message hash and signature
-        buff = message.message.copy()
+        buff = message.copy()
         msg_signature = buff.pop("signature")
         #serialize message buffer
         msg_data= json.dumps(buff)
@@ -101,23 +109,23 @@ class HeartbeatProtocol:
             return
         #decrypt message
         try:
-            decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
+            decrypted_msg = EncryptionModule.decrypt_symmetric(message["message"],session["key"])
         except:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid key")
             return
         #validate message
-        message.message["message"] = json.loads(decrypted_msg)
+        message["message"] = json.loads(decrypted_msg)
         #check counter
-        #if message.message["message"]["counter"]<=session["counter"]:
+        #if message["message"]["counter"]<=session["counter"]:
         #    if self.DEBUG:
         #        loginfo(f"{self.node_id}: Invalid counter")
         #    return
         #update node state table
-        #self.parent.server.logger.warning(f'table request : {json.dumps(message.message["message"]["data"])}' )
-        self.make_function_call(self.sessions,"update_node_state_table",message.message["message"]["data"])
+        #self.parent.server.logger.warning(f'table request : {json.dumps(message["message"]["data"])}' )
+        self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
         #chcek blockchain status
-        if self.make_function_call(self.blockchain,"check_sync",*message.message["message"]["blockchain_status"]) == False:
+        if self.make_function_call(self.blockchain,"check_sync",*message["message"]["blockchain_status"]) == False:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Un synced blockchain, sending sync request")
             self.make_function_call(self.blockchain,"send_sync_request")
@@ -137,14 +145,14 @@ class HeartbeatProtocol:
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node
         #get session
-        session = self.make_function_call(self.sessions,"get_connection_sessions",message.message["session_id"])
+        session = self.make_function_call(self.sessions,"get_connection_sessions",message["session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid session")
             return
         
         #get message hash and signature
-        buff = message.message.copy()
+        buff = message.copy()
         msg_signature = buff.pop("signature")
         #serialize message buffer
         msg_data= json.dumps(buff)
@@ -155,27 +163,27 @@ class HeartbeatProtocol:
             return
         #decrypt message
         try:
-            decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
+            decrypted_msg = EncryptionModule.decrypt_symmetric(message["message"],session["key"])
         except:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid key")
             return
         #validate message
-        message.message["message"] = json.loads(decrypted_msg)
-        #self.parent.server.logger.warning(f'table response : {json.dumps(message.message["message"]["data"])}' )
+        message["message"] = json.loads(decrypted_msg)
+        #self.parent.server.logger.warning(f'table response : {json.dumps(message["message"]["data"])}' )
         #check counter
-        #if message.message["message"]["counter"]<=session["counter"]:
+        #if message["message"]["counter"]<=session["counter"]:
         #    if self.DEBUG:
         #        loginfo(f"{self.node_id}: Invalid counter")
         #    return
         #update node state table
-        self.make_function_call(self.sessions,"update_node_state_table",message.message["message"]["data"])
+        self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
         #update session
-        self.make_function_call(self.sessions,"update_connection_session",message.message["session_id"],{
-            "counter":message.message["message"]["counter"],
+        self.make_function_call(self.sessions,"update_connection_session",message["session_id"],{
+            "counter":message["message"]["counter"],
             "last_active": mktime(datetime.datetime.now().timetuple())})
         #chcek blockchain status
-        if self.make_function_call(self.blockchain,"check_sync",*message.message["message"]["blockchain_status"])== False:
+        if self.make_function_call(self.blockchain,"check_sync",*message["message"]["blockchain_status"])== False:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Un synced blockchain, sending sync request")
             self.make_function_call(self.blockchain,"send_sync_request")    
@@ -196,4 +204,10 @@ if __name__ == '__main__':
         raise ROSInterruptException("Invalid arguments : node_type")
     
     node = HeartbeatProtocol(node_id,node_type,DEBUG=True)
-    spin()
+    rate = Rate(10)
+    while not is_shutdown():
+        #check queue
+        if not node.queue.empty():
+            msg = node.queue.get()
+            node.handle(msg)
+        rate.sleep()

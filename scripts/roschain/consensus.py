@@ -94,7 +94,6 @@ class SBFT:
         
     def handle(self, msg):
         #handle message
-        msg = json.loads(msg.data)
         msg = msg["message"]["data"]
         operation = msg['operation']
         if operation == 'pre-prepare':
