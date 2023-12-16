@@ -28,7 +28,7 @@ class HeartbeatProtocol:
         #messsage publisher
         self.publisher = Publisher('send_message', String, queue_size=10)
         #define network 
-        self.network = ServiceProxy("network/call",FunctionCall)
+        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
         #define last heartbeat
         self.last_call = mktime(datetime.datetime.now().timetuple())
         #get public and private key 
@@ -86,7 +86,7 @@ class HeartbeatProtocol:
         #serialize message
         msg_data= json.dumps(msg_data)
         #call network service
-        self.make_function_call(self.network,"send_message",session["node_id"],msg_data)
+        self.prepare_message.publish(json.dumps({"message":msg_data,"target":session["node_id"]}))
         
            
     def handle_heartbeat(self,message):
@@ -140,7 +140,7 @@ class HeartbeatProtocol:
         #serialize message
         msg_data= json.dumps(msg_data)
         #call network service
-        self.make_function_call(self.network,"send_message",session["node_id"],msg_data)
+        self.prepare_message.publish(json.dumps({"message":msg_data,"target":session["node_id"]}))
  
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node

@@ -29,7 +29,9 @@ class NetworkInterface:
         #define queue
         self.queue = Queue()
         #define connector subscriber
-        self.subscriber = Subscriber('handle_message', String, self.to_queue)
+        self.subscriber = Subscriber('handle_message', String, self.to_queue,("handle",))
+        #define network prepaeration service
+        self.prepare_subscriber = Subscriber('prepare_message', String, self.to_queue,("prepare",))
         #define connector publisher
         self.publisher = Publisher('send_message', String, queue_size=10)
         #define discovery publisher
@@ -38,6 +40,8 @@ class NetworkInterface:
         self.heartbeat_publisher = Publisher('heartbeat_handler', String, queue_size=10)
         # Define consensus publisher
         self.consensus_publisher = Publisher('consensus_handler', String, queue_size=10)
+        #Define sync publisher
+        self.sync_publisher = Publisher('sync_handler', String, queue_size=10)
         #define server
         self.server = Service('call', FunctionCall, self.handle_function_call)
         #define sessions service proxy
@@ -71,8 +75,11 @@ class NetworkInterface:
             response = FunctionCallResponse(response)
         return response
     
-    def to_queue(self,message):
-        self.queue.put(json.loads(message))
+    def to_queue(self,message,type):
+        '''
+        Add message to queue
+        '''        
+        self.queue.put({"type":type,"data":json.dumps(message.data)})
      
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -147,7 +154,7 @@ class NetworkInterface:
             
             return message.message
 
-    def send_message(self, target, message):
+    def send_message(self,msg_type, target, message,signed=False):
         
         #define target sessions
         if target == "all":
@@ -161,38 +168,50 @@ class NetworkInterface:
             #check if node_id is local node_id 
             if node_id == self.node_id:
                 continue
-            #check if session is available
-            if not self.sessions("has_active_connection_session",json.dumps([node_id])):
-                if self.DEBUG:
-                    loginfo(f"{self.node_id}: No active session")
-                #return Response("No active session", status=400)
-            #get session
-            session = self.sessions("get_connection_session_by_node_id",json.dumps([node_id]))
-            #prepare message data
-            msg_data = OrderedDict({
-            "timestamp": str(datetime.datetime.now()),
-                "data":message
-                })
-            #stringify message data
-            msg_data = json.dumps(msg_data)
-            #encrypt message data
-            encrypted_data = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
+            #get node_ids session 
+            session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",node_id)
+            if session == None:
+                pass
+                #check if there is discovery session
+                session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
+                if session:
+                    #stringify message data
+                    msg_data = json.dumps(message["message"])
+                    #encrypt message data
+                    prepared_message = EncryptionModule.encrypt(msg_data,EncryptionModule.reformat_public_key(session["pk"]))
+                else:
+                    prepared_message= message["message"]
+            else:
+                #prepare message data
+                msg_data = OrderedDict({
+                "timestamp": str(datetime.datetime.now()),
+                    "data":message
+                    })
+                #stringify message data
+                msg_data = json.dumps(msg_data)
+                #encrypt message data
+                prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
+                
+            
+                
             #prepare message payload
             msg_payload = OrderedDict({
-                "type": "data_exchange",
+                "type": msg_type,
                 "time":mktime(datetime.datetime.now().timetuple()),
                 "node_id": self.node_id,
                 "node_type": self.node_type,
-                "data": msg_data,
-                "session_id": session["session_id"],
-                "message": encrypted_data
+                "session_id": message["session_id"],
+                "message": prepared_message
                 })
+            #check if signed 
+            if signed:
+                msg_payload["signature"] = EncryptionModule.sign(json.dumps(msg_payload),self.sk)
             #add message to the queue
-            self.publisher.publish(json.dumps([{
+            self.publisher.publish(json.dumps({
                 "target": session["node_id"],
                 "time":mktime(datetime.datetime.now().timetuple()),
                 "message": msg_payload,
-            },"outgoing"]))
+            }))
             
     def handle_message(self, message):
         #check message type
@@ -208,6 +227,8 @@ class NetworkInterface:
             self.discovery_publisher.publish(json.dumps(message))
         elif str(message["type"]).startswith("heartbeat"):
             self.heartbeat_publisher.publish(json.dumps(message))
+        elif str(message["type"]).startswith("sync"):
+            self.sync_publisher.publish(json.dumps(message))
         elif message["type"]=="data_exchange":
             self.consensus_publisher.publish(json.dumps(message))
         else:
@@ -231,7 +252,12 @@ if __name__ == "__main__":
     rate = Rate(10)
     while not is_shutdown():
         if not network.queue.empty():
-            messae = network.queue.get()
-            network.handle_message(*messae)
+            message = network.queue.get()
+            if message["type"] == "handle":
+                network.handle_message(message["data"])
+            elif message["type"] == "prepare":
+                network.send_message(message["data"]["type"],message["data"]["target"],message["data"]["message"],message["data"].get("signed",False))
+            else:
+                loginfo(f"{network.node_id}: Invalid message type on network node")
         rate.sleep()
    

@@ -30,8 +30,8 @@ class SBFT:
         self.node = init_node("consensus",anonymous=True)
         #init sessions
         self.sessions = ServiceProxy("sessions/call",FunctionCall)
-        #init network 
-        self.network = ServiceProxy("network/call",FunctionCall)
+        #init prepare message 
+        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
         #init blockchain
         self.blockchain = ServiceProxy("blockchain/call",FunctionCall)
         #message publisher
@@ -164,7 +164,7 @@ class SBFT:
         msg["signature"] = msg_signature
         
         #broadcast message to the network
-        self.make_function_call(self.network,"send_message",'all',msg)
+        self.prepare_message.publish(json.dumps({"message":msg,"target":"all"}))
     
     def pre_prepare(self,msg):
         #handle pre-prepare message
@@ -218,7 +218,7 @@ class SBFT:
             "node_ids":msg['node_ids']
         }
         #send_message
-        self.make_function_call(self.network,"send_message",msg['source'],payload)
+        self.prepare_message.publish(json.dumps({"message":payload,"target":msg['source']}))
     
     def prepare(self,msg):
         #handle prepare message
@@ -285,7 +285,7 @@ class SBFT:
         self.views[view_id]["status"] = "prepare"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #broadcast message
-        self.make_function_call(self.network,"send_message",'all',payload)
+        self.prepare_message.publish(json.dumps({"message":payload,"target":"all"}))
         
     
     def prepare_collect(self,msg):
@@ -359,7 +359,7 @@ class SBFT:
         #update view
         self.views[view_id]["status"] = "commit"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
-        self.make_function_call(self.network,"send_message",view["source"],payload)
+        self.prepare_message.publish(json.dumps({"message":payload,"target":view["source"]}))
     def commit(self,msg):
         #handle commit message
         #check if view exists
@@ -426,7 +426,7 @@ class SBFT:
         except Exception as e:
             print(f"{self.node_id}: ERROR : {e}")
         #broadcast message
-        self.make_function_call(self.network,"send_message",'all',payload)
+        self.prepare_message.publish(json.dumps({"message":payload,"target":"all"}))
     
     def commit_collect(self,msg):
         #handle commit-collect message

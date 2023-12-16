@@ -1,6 +1,6 @@
 import json
 import datetime
-from rospy import spin,loginfo,init_node,ServiceProxy,Publisher,Service,get_namespace,get_param,ROSInterruptException
+from rospy import spin,loginfo,init_node,ServiceProxy,Publisher,Service,get_namespace,get_param,ROSInterruptException,Subscriber
 from collections import OrderedDict
 from time import mktime
 from database import Database
@@ -262,8 +262,10 @@ class Blockchain:
         node = init_node("blochchain",anonymous=True)
         #init sessions
         self.sessions = ServiceProxy("sessions/call",FunctionCall)
-        #init network 
-        self.network = ServiceProxy("network/call",FunctionCall)
+        #init network publisher
+        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
+        #init sync handler subscriper
+        self.subscriber = Subscriber("sync_handler",String,self.handle_sync)
         #message publisher
         self.publisher = Publisher("send_message",String,queue_size=10)
         #define blockchain service
@@ -668,6 +670,14 @@ class Blockchain:
 
         return blockchain
     
+    def handle_sync(self,msg):
+        msg = json.loads(msg.data)
+        if msg["type"] == "sync_request":
+            self.handle_sync_request(msg["message"])
+        elif msg["type"] == "sync_reply":
+            self.handle_sync_reply(msg["message"])
+        else:
+            loginfo(f"{self.node_id}: Unknown message type")
     def send_sync_request(self):
         #get the sync info
         last_record,number_of_records = self.get_sync_info()
@@ -689,7 +699,7 @@ class Blockchain:
             "source":self.node_id
         }
         #send the sync request to other nodes
-        self.make_function_call(self.network,"send_message",'all',msg)
+        self.prepare_message.publish(json.dumps({"message":msg,"target":"all","type":"sync_request"}))
 
     #handle sync request from other nodes
     def handle_sync_request(self,msg):
@@ -709,7 +719,7 @@ class Blockchain:
                 "view_id":view_id,
                 "source":self.node_id
             }
-            self.make_function_call(self.network,"send_message",node_id,msg)
+            self.prepare_message.publish(json.dumps({"message":msg,"target":node_id,"type":"sync_reply"}))
  
     def handle_sync_reply(self,msg):
         #check if the view exists
