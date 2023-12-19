@@ -79,12 +79,9 @@ class HeartbeatProtocol:
         #prepare message 
         msg_data = OrderedDict({
                 "timestamp": str(datetime.datetime.now()),
-                "counter": session["counter"]+1,
                 "data":self.make_function_call(self.sessions,"get_node_state_table"),
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
-        #serialize message
-        msg_data= json.dumps(msg_data)
         #call network service
         self.prepare_message.publish(json.dumps({"message":msg_data,"target":session["node_id"]}))
         
@@ -97,25 +94,6 @@ class HeartbeatProtocol:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid session")
             return
-        #get message hash and signature
-        buff = message.copy()
-        msg_signature = buff.pop("signature")
-        #serialize message buffer
-        msg_data= json.dumps(buff)
-        #verify message signature
-        if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid signature")
-            return
-        #decrypt message
-        try:
-            decrypted_msg = EncryptionModule.decrypt_symmetric(message["message"],session["key"])
-        except:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid key")
-            return
-        #validate message
-        message["message"] = json.loads(decrypted_msg)
         #check counter
         #if message["message"]["counter"]<=session["counter"]:
         #    if self.DEBUG:
@@ -133,12 +111,9 @@ class HeartbeatProtocol:
         #prepare message 
         msg_data = OrderedDict({
                 "timestamp": str(datetime.datetime.now()),
-                "counter": session["counter"]+1,
                 "data":self.make_function_call(self.sessions,"get_node_state_table"),
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
-        #serialize message
-        msg_data= json.dumps(msg_data)
         #call network service
         self.prepare_message.publish(json.dumps({"message":msg_data,"target":session["node_id"]}))
  
@@ -150,26 +125,6 @@ class HeartbeatProtocol:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid session")
             return
-        
-        #get message hash and signature
-        buff = message.copy()
-        msg_signature = buff.pop("signature")
-        #serialize message buffer
-        msg_data= json.dumps(buff)
-        #verify message signature
-        if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid signature")
-            return
-        #decrypt message
-        try:
-            decrypted_msg = EncryptionModule.decrypt_symmetric(message["message"],session["key"])
-        except:
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Invalid key")
-            return
-        #validate message
-        message["message"] = json.loads(decrypted_msg)
         #self.parent.server.logger.warning(f'table response : {json.dumps(message["message"]["data"])}' )
         #check counter
         #if message["message"]["counter"]<=session["counter"]:
@@ -180,7 +135,6 @@ class HeartbeatProtocol:
         self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
         #update session
         self.make_function_call(self.sessions,"update_connection_session",message["session_id"],{
-            "counter":message["message"]["counter"],
             "last_active": mktime(datetime.datetime.now().timetuple())})
         #chcek blockchain status
         if self.make_function_call(self.blockchain,"check_sync",*message["message"]["blockchain_status"])== False:

@@ -4,7 +4,7 @@ from queue import Queue
 from encryption import EncryptionModule
 from rospy import loginfo
 from time import mktime
-from rospy import init_node, Subscriber,Publisher,get_namespace,get_param,ROSInterruptException,Service,ServiceProxy,Rate,is_shutdown
+from rospy import Subscriber,Publisher,ROSInterruptException,Service,ServiceProxy,Rate,init_node,get_namespace,get_param,is_shutdown
 from multirobot_sim.srv import FunctionCall,FunctionCallResponse
 from std_msgs.msg import String
 
@@ -89,10 +89,10 @@ class NetworkInterface:
         return json.loads(response)
     def verify_data(self,message):
         #check if message has session id
-        if message.message["session_id"] is None: 
+        if message["session_id"] == "": 
             #the message has no session id, so it's discovery message
             #verify the message hash 
-            buff = message.message
+            buff = message["message"]
             msg_signature = buff.pop('signature')
             msg_data=buff
             #check if message is string
@@ -155,7 +155,6 @@ class NetworkInterface:
             return message.message
 
     def send_message(self,msg_type, target, message,signed=False):
-        
         #define target sessions
         if target == "all":
             node_ids = self.sessions("get_active_nodes",json.dumps([]))
@@ -171,7 +170,6 @@ class NetworkInterface:
             #get node_ids session 
             session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",node_id)
             if session == None:
-                pass
                 #check if there is discovery session
                 session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
                 if session:
@@ -191,9 +189,6 @@ class NetworkInterface:
                 msg_data = json.dumps(msg_data)
                 #encrypt message data
                 prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
-                
-            
-                
             #prepare message payload
             msg_payload = OrderedDict({
                 "type": msg_type,
