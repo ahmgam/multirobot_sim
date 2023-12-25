@@ -1,9 +1,9 @@
 <launch>
   <!--Arguments-->
-    <arg name="rabbitmq_endpoint" default="localhost"/>
-    <arg name="rabbitmq_username" default="admin"/>
-    <arg name="rabbitmq_password" default="passw123"/>
-    <arg name="rabbitmq_port" default="1883"/>
+    <arg name="endpoint" default="localhost"/>
+    <arg name="username" default="admin"/>
+    <arg name="password" default="passw123"/>
+    <arg name="port" default="1883"/>
     <arg name="base_dir" default="$(find multirobot_sim)/scripts"/>
     <arg name="secret" default="abc123"/>
   <!-- Load the world -->
@@ -12,10 +12,10 @@
   <include file="$(find multirobot_sim)/launch/blockchain.launch">
     <arg name="node_id" value="node1"/>
     <arg name="node_type" value="uav"/>
-    <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
-    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
-    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+    <arg name="endpoint" value="$(arg endpoint)"/>
+    <arg name="username" value="$(arg username)"/>
+    <arg name="password" value="$(arg password)"/>
+    <arg name="port" value="$(arg port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
   </include>
@@ -23,10 +23,10 @@
   <include file="$(find multirobot_sim)/launch/blockchain.launch">
     <arg name="node_id" value="node2"/>
     <arg name="node_type" value="ugv"/>
-    <arg name="rabbitmq_endpoint" value="$(arg rabbitmq_endpoint)"/>
-    <arg name="rabbitmq_username" value="$(arg rabbitmq_username)"/>
-    <arg name="rabbitmq_password" value="$(arg rabbitmq_password)"/>
-    <arg name="rabbitmq_port" value="$(arg rabbitmq_port)"/>
+    <arg name="endpoint" value="$(arg endpoint)"/>
+    <arg name="username" value="$(arg username)"/>
+    <arg name="password" value="$(arg password)"/>
+    <arg name="port" value="$(arg port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
   </include>

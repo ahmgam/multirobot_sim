@@ -15,11 +15,13 @@ from queue import Queue
 ########################################
 
 class DiscoveryProtocol:
-    def __init__(self,node_id,node_type,DEBUG=True):
+    def __init__(self,node_id,node_type,secret,DEBUG=True):
         #define node id
         self.node_id = node_id
         #define node type
         self.node_type = node_type
+        #define secret
+        self.secret = secret
         #define debug mode
         self.DEBUG = DEBUG
         #define node
@@ -96,7 +98,7 @@ class DiscoveryProtocol:
         return ''.join(choices(ascii_lowercase, k=length))
     
     def solve_challenge(self,challenge):
-        solution = EncryptionModule.hash(challenge)
+        solution = EncryptionModule.hash(challenge+self.secret)
         client_sol = solution[0:len(solution)//2]
         server_sol = solution[len(solution)//2:]
         return client_sol, server_sol
@@ -418,7 +420,13 @@ if __name__ == '__main__':
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_type")
     
-    node = DiscoveryProtocol(node_id,node_type,DEBUG=True)
+    try :
+        secret= get_param(f'{ns}/discovery/secret') # node_name/argsname
+        loginfo(f"discovery: Getting secret argument, and got : {secret}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : secret")
+    
+    node = DiscoveryProtocol(node_id,node_type,secret,DEBUG=True)
     #define rate
     rate = Rate(10)
     while not is_shutdown():

@@ -248,7 +248,7 @@ class Database (object):
 
 class Blockchain:
     #initialize the blockchain
-    def __init__(self,node_id,node_type,seed,DEBUG=False):
+    def __init__(self,node_id,node_type,secret,DEBUG=False):
         
         #node id
         self.node_id = node_id
@@ -256,8 +256,8 @@ class Blockchain:
         self.node_type = node_type
         #debug mode
         self.DEBUG = DEBUG
-        #seed of the blockchain
-        self.seed = seed
+        #secret of the blockchain
+        self.secret = secret
         loginfo(f"{node_id}: blockchain: Initializing")
         node = init_node("blochchain",anonymous=True)
         #init sessions
@@ -503,7 +503,7 @@ class Blockchain:
         
         if last_transaction_id is None:
             #add genesis transaction, get the hash of auth data
-            prev_hash = EncryptionModule.hash(json.dumps(self.seed))
+            prev_hash = EncryptionModule.hash(json.dumps(self.secret))
         else:
             #get the hash of last transaction
             prev_hash = self.db.select("block",["combined_hash"],("id",'==',last_transaction_id))[0]["combined_hash"]
@@ -789,11 +789,11 @@ if __name__ == "__main__":
         raise ROSInterruptException("Invalid arguments : node_type")
     
     try :
-        seed = get_param(f'{ns}/dummy_transactions/seed') # node_name/argsname
-        loginfo(f"dummy_transactions: Getting seed argument, and got : {seed}")
+        secret = get_param(f'{ns}/dummy_transactions/secret') # node_name/argsname
+        loginfo(f"dummy_transactions: Getting secret argument, and got : {secret}")
     except KeyError:
-        raise ROSInterruptException("Invalid arguments : seed")
+        raise ROSInterruptException("Invalid arguments : secret")
     
     
-    node = Blockchain(node_id,node_type,seed,DEBUG=True)
+    node = Blockchain(node_id,node_type,secret,DEBUG=True)
     spin()

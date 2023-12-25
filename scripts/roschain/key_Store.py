@@ -103,12 +103,12 @@ class EncryptionManager:
 if __name__ == "__main__":
     ns = get_namespace()
     try :
-        public_key_file= get_param(f'{ns}/roschain/public_key_file') # node_name/argsname
+        public_key_file= get_param(f'{ns}/key_store/public_key_file') # node_name/argsname
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : public_key_file")
     
     try:
-        private_key_file= get_param(f'{ns}/roschain/private_key_file') # node_name/argsname
+        private_key_file= get_param(f'{ns}/key_store/private_key_file') # node_name/argsname
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : private_key_file")
     

@@ -107,5 +107,7 @@ if __name__ == '__main__':
         auth = None
         rospy.loginfo(f"connector: Getting auth argument, and got : {auth}")
     
+    auth = str(auth).split(":")
+    auth = {"username":auth[0],"password":auth[1]}
     node = MQTTCommunicationModule(node_id,endpoint,port,auth)
     rospy.spin()
