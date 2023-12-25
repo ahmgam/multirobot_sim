@@ -14,50 +14,50 @@
     <group ns="$(arg node_id)">
         <!-- Load the controller -->
         <node pkg="multirobot_sim" type="roschain.py" name="roschain" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
         </node>
         <node pkg="multirobot_sim" type="consensus.py" name="consensus" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
         </node>   
         <node pkg="multirobot_sim" type="network.py" name="network" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
         </node>   
         <node pkg="multirobot_sim" type="discovery.py" name="discovery" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
         </node>   
         <node pkg="multirobot_sim" type="heartbeat.py" name="heartbeat" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
         </node>   
         <node pkg="multirobot_sim" type="key_store.py" name="key_store" output="screen" required="true">
-            <param name="public_key_file" value="$(arg robot_name)_pk.pem"/>
+            <param name="public_key_file" value="$(arg node_id)_pk.pem"/>
             <param name="private_key_file" value="$(arg node_type)_sk.pem"/>
         </node>   
         <node pkg="multirobot_sim" type="connector.py" name="connector" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="endpoint" value="$(arg endpoint)"/>
             <param name="auth" value="$(arg username):$(arg password)"/>
             <param name="port" value="$(arg port)"/>
         </node>  
         <node pkg="multirobot_sim" type="blockchain.py" name="blockchain" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
             <param name="secret" value="$(arg secret)"/>
         </node>  
         <node pkg="multirobot_sim" type="session.py" name="session" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
         </node> 
         <node pkg="multirobot_sim" type="database.py" name="database" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="db_dir" value="$(arg base_directory)"/>
             <param name="schema" value="$(arg schema)"/>
         </node>  
         <node pkg="multirobot_sim" type="dummy_transactions.py" name="dummy_transactions" output="screen" required="true">
-            <param name="node_id" value="$(arg robot_name)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
         </node>   
     </group>

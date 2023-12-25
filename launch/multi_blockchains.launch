@@ -6,6 +6,7 @@
     <arg name="port" default="1883"/>
     <arg name="base_dir" default="$(find multirobot_sim)/scripts"/>
     <arg name="secret" default="abc123"/>
+    <arg name="schema" default="$(arg base_dir)/schema.sql"/>
   <!-- Load the world -->
 
   <!-- Spawn robot 1-->
@@ -18,6 +19,7 @@
     <arg name="port" value="$(arg port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
+    <arg name="schema" value="$(arg schema)"/>
   </include>
   <!-- Spawn robot 2-->
   <include file="$(find multirobot_sim)/launch/blockchain.launch">
@@ -29,5 +31,6 @@
     <arg name="port" value="$(arg port)"/>
     <arg name="secret" value="$(arg secret)"/>
     <arg name="base_directory" value="$(arg base_dir)"/>
+    <arg name="schema" value="$(arg schema)"/>
   </include>
 </launch>
