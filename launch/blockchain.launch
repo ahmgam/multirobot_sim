@@ -28,6 +28,7 @@
         <node pkg="multirobot_sim" type="discovery.py" name="discovery" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="secret" value="$(arg secret)"/>
         </node>   
         <node pkg="multirobot_sim" type="heartbeat.py" name="heartbeat" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>

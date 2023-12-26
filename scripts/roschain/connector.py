@@ -1,8 +1,8 @@
-
+#!/usr/bin/env python
 from queue import Queue
 import json
 import rospy
-from std_msgs import String
+from std_msgs.msg import String
 from paho.mqtt import client as mqtt_client
 from collections import OrderedDict
 class MQTTCommunicationModule:

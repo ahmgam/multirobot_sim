@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from collections import OrderedDict
 from time import mktime
 from datetime import datetime
@@ -9,15 +10,15 @@ import rospy
 class SessionManager:
     def __init__(self,node_id):
         #define session manager
+        self.node_id = node_id
         self.discovery_sessions =OrderedDict()
         self.connection_sessions = OrderedDict()
         #self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
         self.node_states = OrderedDict()
         self.node = rospy.init_node("session_manager", anonymous=True)
-        self.node_id = node_id
-        self.refresh_node_state_table()
-        self.node_id = node_id
         self.server = rospy.Service('call', FunctionCall, self.handle_function_call)
+        self.refresh_node_state_table()
+        
         
     def handle_function_call(self,req):
         #get function name and arguments from request

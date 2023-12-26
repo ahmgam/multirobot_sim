@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from messages import *
 import datetime
 from queue import Queue
@@ -26,6 +27,8 @@ class NetworkInterface:
         self.heartbeat_interval = 5
         #init node
         self.node = init_node("network_interface", anonymous=True)
+        #define server
+        self.server = Service('call', FunctionCall, self.handle_function_call)
         #define queue
         self.queue = Queue()
         #define connector subscriber
@@ -42,12 +45,12 @@ class NetworkInterface:
         self.consensus_publisher = Publisher('consensus_handler', String, queue_size=10)
         #Define sync publisher
         self.sync_publisher = Publisher('sync_handler', String, queue_size=10)
-        #define server
-        self.server = Service('call', FunctionCall, self.handle_function_call)
         #define sessions service proxy
-        self.sessions = ServiceProxy('sessions/call', FunctionCall)
+        self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
+        self.sessions.wait_for_service()
         #define key store proxy
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]

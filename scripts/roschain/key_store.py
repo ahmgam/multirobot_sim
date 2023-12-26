@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 #################################
 # Encryption Module
@@ -10,7 +11,16 @@ from rospy import Service,init_node,get_namespace,get_param,ROSInterruptExceptio
 from multirobot_sim.srv import FunctionCall,FunctionCallResponse
 
 class EncryptionManager:
-    
+    def __init__(self, public_key_file, private_key_file):
+        self.public_key_file = public_key_file
+        self.private_key_file = private_key_file
+        self.pk, self.sk = self.load_keys(public_key_file, private_key_file)
+        if self.pk is None or self.sk is None:
+            self.pk, self.sk = self.generate_keys()
+            self.store_keys(public_key_file, private_key_file, self.pk, self.sk)
+        self.node = init_node("key_store", anonymous=True)
+        self.server = Service('call', FunctionCall, self.handle_function_call)
+        
     @staticmethod
     def generate_keys():
         '''
@@ -77,16 +87,7 @@ class EncryptionManager:
     def generate_symmetric_key():
         return Fernet.generate_key().decode("ascii")
          
-    def __init__(self, public_key_file, private_key_file):
-        self.public_key_file = public_key_file
-        self.private_key_file = private_key_file
-        self.pk, self.sk = self.load_keys(public_key_file, private_key_file)
-        if self.pk is None or self.sk is None:
-            self.pk, self.sk = self.generate_keys()
-            self.store_keys(public_key_file, private_key_file, self.pk, self.sk)
-        self.node = init_node("key_store", anonymous=True)
-        self.server = Service('call', FunctionCall, self.handle_function_call)
-        
+
 
     def get_rsa_key(self):
         return {

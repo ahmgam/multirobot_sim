@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from collections import OrderedDict
 from encryption import EncryptionModule
 from queue import Queue
@@ -17,18 +18,19 @@ class HeartbeatProtocol:
         self.heartbeat_interval = 5
         #define node
         self.node = init_node("heartbeat_protocol", anonymous=True)
-        #define sessions
-        self.sessions = ServiceProxy('sessions/call', FunctionCall)
-        #define blockchain
-        self.blockchain = ServiceProxy('blockchain/call', FunctionCall)
-        #define key store proxy
-        self.key_store = ServiceProxy('key_store/call', FunctionCall)
         #define heartbeat subscriber
         self.subscriber = Subscriber('heartbeat_handler', String, self.to_queue)
-        #messsage publisher
-        self.publisher = Publisher('send_message', String, queue_size=10)
         #define network 
         self.prepare_message = Publisher("prepare_message",String,queue_size=10)
+        #define sessions
+        self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
+        self.sessions.wait_for_service()
+        #define blockchain
+        self.blockchain = ServiceProxy('blockchain/call', FunctionCall,True)
+        self.blockchain.wait_for_service()
+        #define key store proxy
+        self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        self.key_store.wait_for_service()
         #define last heartbeat
         self.last_call = mktime(datetime.datetime.now().timetuple())
         #get public and private key 

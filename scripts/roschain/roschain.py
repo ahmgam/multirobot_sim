@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 import json
 import datetime
 from rospy import init_node,get_param,loginfo,get_namespace,spin,ROSInterruptException,Service,ServiceProxy
@@ -15,8 +15,6 @@ class RosChain:
         '''
         Initialize network interface
         '''
-        #define ros node
-        self.node = init_node("roschain", anonymous=True)
         #define is_initialized
         self.ready = False
         #define debug mode
@@ -25,18 +23,20 @@ class RosChain:
         self.node_id = node_id
         #define node type
         self.node_type = node_type
+        #define ros node
+        self.node = init_node("roschain", anonymous=True)
+        #define records service
+        loginfo(f"{self.node_id}: ROSChain:Initializing records service")
+        self.get_record_service = Service(f'get_records',GetBCRecords,lambda req: self.get_records(req))
+        #define submit message service
+        loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
+        self.submit_message_service = Service(f'submit_message',SubmitTransaction,self.submit_message)
         #define blockchain service proxy 
         self.blockchain = ServiceProxy('blockchain/call', FunctionCall)
         self.blockchain.wait_for_service()
         #define consensus service
         self.consensus = ServiceProxy('consensus/call', FunctionCall)
         self.consensus.wait_for_service()
-        #define records service
-        loginfo(f"{self.node_id}: ROSChain:Initializing records service")
-        self.get_record_service = Service(f'get_records',GetBCRecords,lambda req: self.get_records(req))
-        #define submit message service
-        loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
-        self.submit_message_service = Service(f'submit_message',SubmitTransaction,lambda req: self.submit_message(self,req))
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)

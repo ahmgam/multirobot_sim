@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from random import choices
 from string import ascii_lowercase
 import json
@@ -28,20 +29,21 @@ class SBFT:
         self.view_timeout = 10
         #define node 
         self.node = init_node("consensus",anonymous=True)
-        #init sessions
-        self.sessions = ServiceProxy("sessions/call",FunctionCall)
-        #init prepare message 
-        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
-        #init blockchain
-        self.blockchain = ServiceProxy("blockchain/call",FunctionCall)
-        #message publisher
-        self.publisher = Publisher("send_message",String,queue_size=10)
-        #message subscriber 
-        self.subscriber = Subscriber("consensus_handler",String,self.handle_message)
-        #define key store proxy
-        self.key_store = ServiceProxy('key_store/call', FunctionCall)
         #define function call service
         self.server = Service("call",FunctionCall,self.handle_function_call)
+        #init prepare message 
+        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
+        #message subscriber 
+        self.subscriber = Subscriber("consensus_handler",String,self.handle_message)
+        #init sessions
+        self.sessions = ServiceProxy("sessions/call",FunctionCall,True)
+        self.sessions.wait_for_service()
+        #init blockchain
+        self.blockchain = ServiceProxy("blockchain/call",FunctionCall,True)
+        self.blockchain.wait_for_service()
+        #define key store proxy
+        self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]

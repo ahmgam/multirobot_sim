@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import json
 import datetime
 from rospy import spin,loginfo,init_node,ServiceProxy,Publisher,Service,get_namespace,get_param,ROSInterruptException,Subscriber
@@ -260,19 +261,18 @@ class Blockchain:
         self.secret = secret
         loginfo(f"{node_id}: blockchain: Initializing")
         node = init_node("blochchain",anonymous=True)
-        #init sessions
-        self.sessions = ServiceProxy("sessions/call",FunctionCall)
-        #init network publisher
-        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
-        #init sync handler subscriper
-        self.subscriber = Subscriber("sync_handler",String,self.handle_sync)
-        #message publisher
-        self.publisher = Publisher("send_message",String,queue_size=10)
         #define blockchain service
         self.server = Service("call",FunctionCall,self.handle_function_call)
         # define database manager
         self.db = Database(self.node_id)
         loginfo(f"{node_id}: blockchain: Initializing database")
+        #init network publisher
+        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
+        #init sync handler subscriper
+        self.subscriber = Subscriber("sync_handler",String,self.handle_sync)
+        #init sessions
+        self.sessions = ServiceProxy("sessions/call",FunctionCall,True)
+        self.sessions.wait_for_service()
         # create tables
         self.create_tables()
         # define queue for storing data
@@ -777,20 +777,20 @@ if __name__ == "__main__":
     #get namespace 
     ns = get_namespace()
     try :
-        node_id= get_param(f'{ns}/dummy_transactions/node_id') # node_name/argsname
-        loginfo(f"dummy_transactions: Getting node_id argument, and got : {node_id}")
+        node_id= get_param(f'{ns}/blockchain/node_id') # node_name/argsname
+        loginfo(f"Blockchain: Getting node_id argument, and got : {node_id}")
     except KeyError:
         raise ROSInterruptException("Invalid arguments : node_id")
     
     try :
-        node_type= get_param(f'{ns}/dummy_transactions/node_type') # node_name/argsname
-        loginfo(f"dummy_transactions: Getting node_type argument, and got : {node_type}")
+        node_type= get_param(f'{ns}/blockchain/node_type') # node_name/argsname
+        loginfo(f"Blockchain: Getting node_type argument, and got : {node_type}")
     except KeyError:
         raise ROSInterruptException("Invalid arguments : node_type")
     
     try :
-        secret = get_param(f'{ns}/dummy_transactions/secret') # node_name/argsname
-        loginfo(f"dummy_transactions: Getting secret argument, and got : {secret}")
+        secret = get_param(f'{ns}/blockchain/secret') # node_name/argsname
+        loginfo(f"Blockchain: Getting secret argument, and got : {secret}")
     except KeyError:
         raise ROSInterruptException("Invalid arguments : secret")
     

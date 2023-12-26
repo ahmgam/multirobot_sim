@@ -38,7 +38,7 @@ class DummyTransactions:
             raise rospy.ROSInterruptException("Invalid arguments : node_type")
         
         try :
-            update_interval= rospy.get_param(f'{ns}/dummy_transactions/update_interval') # node_name/argsname
+            update_interval= rospy.get_param(f'{ns}/dummy_transactions/update_interval',5) # node_name/argsname
             rospy.loginfo(f"dummy_transactions: Getting update_interval argument, and got : {update_interval}")
 
         except rospy.ROSInterruptException:

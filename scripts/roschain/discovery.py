@@ -1,4 +1,4 @@
-
+#!/usr/bin/env python
 from messages import *
 from time import sleep,mktime
 import datetime
@@ -30,14 +30,16 @@ class DiscoveryProtocol:
         self.discovery_interval = 10
         #define discovery last call
         self.last_call = mktime(datetime.datetime.now().timetuple())
-        #define session
-        self.sessions = ServiceProxy('sessions/call', FunctionCall)
         #publisher
         self.publisher = Publisher('send_message', String, queue_size=10)
         #subscriber 
         self.subscriber = Subscriber('discovery_handler', String, self.put_queue)
+        #define session
+        self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
+        self.sessions.wait_for_service()
         #define key store proxy
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]
