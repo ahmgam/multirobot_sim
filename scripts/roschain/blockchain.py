@@ -259,32 +259,33 @@ class Blockchain:
         self.DEBUG = DEBUG
         #secret of the blockchain
         self.secret = secret
-        loginfo(f"{node_id}: blockchain: Initializing")
+        loginfo(f"{node_id}: Blockchain: Initializing")
         node = init_node("blochchain",anonymous=True)
         #define blockchain service
         self.server = Service("call",FunctionCall,self.handle_function_call)
         # define database manager
+        loginfo(f"{self.node_id}: Blockchain:Initializing database proxy")
         self.db = Database(self.node_id)
-        loginfo(f"{node_id}: blockchain: Initializing database")
+        loginfo(f"{node_id}: blockchain: Initializing publisher & subscriber")
         #init network publisher
         self.prepare_message = Publisher("prepare_message",String,queue_size=10)
         #init sync handler subscriper
         self.subscriber = Subscriber("sync_handler",String,self.handle_sync)
         #init sessions
+        loginfo(f"{self.node_id}: Blockchain:Initializing database proxy")
         self.sessions = ServiceProxy("sessions/call",FunctionCall,True)
         self.sessions.wait_for_service()
         # create tables
         self.create_tables()
         # define queue for storing data
-        loginfo(f"{node_id}: blockchain: Initializing queue")
         self.genesis_block()
         #sync timeout
-        loginfo(f"{node_id}: blockchain: Initializing sync timeout")
         self.sync_timeout = 10
         #sync views
         self.views = OrderedDict()
         #queue 
         self.queue = OrderedQueue()
+        loginfo(f"{self.node_id}: Blockchain:Initialized successfully")
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)

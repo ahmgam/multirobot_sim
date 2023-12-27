@@ -35,6 +35,7 @@
             <param name="node_type" value="$(arg node_type)"/>
         </node>   
         <node pkg="multirobot_sim" type="key_store.py" name="key_store" output="screen" required="true">
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="public_key_file" value="$(arg node_id)_pk.pem"/>
             <param name="private_key_file" value="$(arg node_type)_sk.pem"/>
         </node>   

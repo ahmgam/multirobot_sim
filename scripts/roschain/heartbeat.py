@@ -19,16 +19,20 @@ class HeartbeatProtocol:
         #define node
         self.node = init_node("heartbeat_protocol", anonymous=True)
         #define heartbeat subscriber
+        loginfo(f"{self.node_id}: HeartbeatProtocol:Initializing heartbeat subscriber")
         self.subscriber = Subscriber('heartbeat_handler', String, self.to_queue)
         #define network 
         self.prepare_message = Publisher("prepare_message",String,queue_size=10)
         #define sessions
+        loginfo(f"{self.node_id}: HeartbeatProtocol:Initializing sessions service")
         self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
         self.sessions.wait_for_service()
         #define blockchain
+        loginfo(f"{self.node_id}: HeartbeatProtocol:Initializing blockchain service")
         self.blockchain = ServiceProxy('blockchain/call', FunctionCall,True)
         self.blockchain.wait_for_service()
         #define key store proxy
+        loginfo(f"{self.node_id}: HeartbeatProtocol:Initializing key store service")
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
         self.key_store.wait_for_service()
         #define last heartbeat
@@ -39,6 +43,7 @@ class HeartbeatProtocol:
         self.sk = keys["sk"]
         #define queue
         self.queue = Queue()
+        loginfo(f"{self.node_id}: HeartbeatProtocol:Initialized successfully")
            
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)

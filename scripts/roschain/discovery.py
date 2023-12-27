@@ -31,13 +31,16 @@ class DiscoveryProtocol:
         #define discovery last call
         self.last_call = mktime(datetime.datetime.now().timetuple())
         #publisher
+        loginfo(f"{self.node_id}: Discovery:Initializing publisher and subscriber")
         self.publisher = Publisher('send_message', String, queue_size=10)
         #subscriber 
         self.subscriber = Subscriber('discovery_handler', String, self.put_queue)
         #define session
+        loginfo(f"{self.node_id}: Discovery:Initializing session service")
         self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
         self.sessions.wait_for_service()
         #define key store proxy
+        loginfo(f"{self.node_id}: Discovery:Initializing key store service")
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
         self.key_store.wait_for_service()
         #get public and private key 
@@ -46,6 +49,7 @@ class DiscoveryProtocol:
         self.sk = keys["sk"]
         # queue
         self.queue = Queue()
+        loginfo(f"{self.node_id}: Discovery:Initialized successfully")
         
     def cron(self):
         #check if disvoery last call is more than discovery interval

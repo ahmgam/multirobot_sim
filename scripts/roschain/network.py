@@ -28,10 +28,12 @@ class NetworkInterface:
         #init node
         self.node = init_node("network_interface", anonymous=True)
         #define server
+        loginfo(f"{self.node_id}: NetworkInterface:Initializing network service")
         self.server = Service('call', FunctionCall, self.handle_function_call)
         #define queue
         self.queue = Queue()
         #define connector subscriber
+        loginfo(f"{self.node_id}: NetworkInterface:Initializing connector subscriber")
         self.subscriber = Subscriber('handle_message', String, self.to_queue,("handle",))
         #define network prepaeration service
         self.prepare_subscriber = Subscriber('prepare_message', String, self.to_queue,("prepare",))
@@ -46,9 +48,11 @@ class NetworkInterface:
         #Define sync publisher
         self.sync_publisher = Publisher('sync_handler', String, queue_size=10)
         #define sessions service proxy
+        loginfo(f"{self.node_id}: NetworkInterface:Initializing sessions service")
         self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
         self.sessions.wait_for_service()
         #define key store proxy
+        loginfo(f"{self.node_id}: NetworkInterface:Initializing key store service")
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
         self.key_store.wait_for_service()
         #get public and private key 
@@ -56,6 +60,7 @@ class NetworkInterface:
         self.pk = keys["pk"]
         self.sk = keys["sk"]
         #define is_initialized
+        loginfo(f"{self.node_id}: NetworkInterface:Initialized successfully")
         
     def handle_function_call(self,req):
         #get function name and arguments from request

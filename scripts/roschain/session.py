@@ -16,8 +16,11 @@ class SessionManager:
         #self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
         self.node_states = OrderedDict()
         self.node = rospy.init_node("session_manager", anonymous=True)
+        rospy.loginfo(f"{self.node_id}: SessionManager:Initializing sessions service")
         self.server = rospy.Service('call', FunctionCall, self.handle_function_call)
+        self.server.wait_for_service()
         self.refresh_node_state_table()
+        rospy.loginfo(f"{self.node_id}: SessionManager:Initialized successfully")
         
         
     def handle_function_call(self,req):

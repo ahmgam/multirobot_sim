@@ -32,11 +32,14 @@ class RosChain:
         loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
         self.submit_message_service = Service(f'submit_message',SubmitTransaction,self.submit_message)
         #define blockchain service proxy 
+        loginfo(f"{self.node_id}: ROSChain:Initializing blockchain service")
         self.blockchain = ServiceProxy('blockchain/call', FunctionCall)
         self.blockchain.wait_for_service()
         #define consensus service
+        loginfo(f"{self.node_id}: ROSChain:Initializing consensus service")
         self.consensus = ServiceProxy('consensus/call', FunctionCall)
         self.consensus.wait_for_service()
+        loginfo(f"{self.node_id}: RSOChain:Initialized successfully")
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)

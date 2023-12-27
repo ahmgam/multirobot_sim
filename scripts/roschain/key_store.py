@@ -7,11 +7,12 @@ import rsa
 import os
 from cryptography.fernet import Fernet
 import json
-from rospy import Service,init_node,get_namespace,get_param,ROSInterruptException,spin
+from rospy import Service,init_node,get_namespace,get_param,ROSInterruptException,spin,loginfo
 from multirobot_sim.srv import FunctionCall,FunctionCallResponse
 
 class EncryptionManager:
-    def __init__(self, public_key_file, private_key_file):
+    def __init__(self, node_id,public_key_file, private_key_file):
+        self.node_id = node_id
         self.public_key_file = public_key_file
         self.private_key_file = private_key_file
         self.pk, self.sk = self.load_keys(public_key_file, private_key_file)
@@ -19,7 +20,9 @@ class EncryptionManager:
             self.pk, self.sk = self.generate_keys()
             self.store_keys(public_key_file, private_key_file, self.pk, self.sk)
         self.node = init_node("key_store", anonymous=True)
+        loginfo(f"{self.node_id}: key_store: Initializing key store service")
         self.server = Service('call', FunctionCall, self.handle_function_call)
+        loginfo(f"{self.node_id}: key_store:Initialized successfully")
         
     @staticmethod
     def generate_keys():
@@ -104,6 +107,11 @@ class EncryptionManager:
 if __name__ == "__main__":
     ns = get_namespace()
     try :
+        node_id= get_param(f'{ns}/key_store/node_id') # node_name/argsname
+        loginfo(f"key_store: Getting node_id argument, and got : {node_id}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : node_id")
+    try :
         public_key_file= get_param(f'{ns}/key_store/public_key_file') # node_name/argsname
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : public_key_file")
@@ -113,6 +121,6 @@ if __name__ == "__main__":
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : private_key_file")
     
-    network = EncryptionManager(public_key_file,private_key_file)
+    network = EncryptionManager(node_id,public_key_file,private_key_file)
     spin()
     

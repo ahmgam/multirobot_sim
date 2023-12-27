@@ -30,18 +30,23 @@ class SBFT:
         #define node 
         self.node = init_node("consensus",anonymous=True)
         #define function call service
+        loginfo(f"{self.node_id}: SBFT:Initializing function call service")
         self.server = Service("call",FunctionCall,self.handle_function_call)
         #init prepare message 
+        loginfo(f"{self.node_id}: SBFT:Initializing publisher and subscriber")
         self.prepare_message = Publisher("prepare_message",String,queue_size=10)
         #message subscriber 
         self.subscriber = Subscriber("consensus_handler",String,self.handle_message)
         #init sessions
+        loginfo(f"{self.node_id}: SBFT:Initializing sessions service")
         self.sessions = ServiceProxy("sessions/call",FunctionCall,True)
         self.sessions.wait_for_service()
         #init blockchain
+        loginfo(f"{self.node_id}: SBFT:Initializing blockchain service")
         self.blockchain = ServiceProxy("blockchain/call",FunctionCall,True)
         self.blockchain.wait_for_service()
         #define key store proxy
+        loginfo(f"{self.node_id}: SBFT:Initializing key store service")
         self.key_store = ServiceProxy('key_store/call', FunctionCall)
         self.key_store.wait_for_service()
         #get public and private key 
@@ -50,6 +55,7 @@ class SBFT:
         self.sk = keys["sk"]
         # queue
         self.queue = Queue()
+        loginfo(f"{self.node_id}: SBFT:Initialized successfully")
         
     def cron(self):
         #TODO implement cron for view timeout
