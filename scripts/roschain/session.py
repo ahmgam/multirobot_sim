@@ -5,6 +5,7 @@ from datetime import datetime
 from random import choices
 from string import ascii_uppercase, digits
 from multirobot_sim.srv import FunctionCall, FunctionCallResponse
+from encryption import EncryptionModule
 import json
 import rospy
 class SessionManager:
@@ -13,14 +14,21 @@ class SessionManager:
         self.node_id = node_id
         self.discovery_sessions =OrderedDict()
         self.connection_sessions = OrderedDict()
-        #self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
-        self.node_states = OrderedDict()
         self.node = rospy.init_node("session_manager", anonymous=True)
         rospy.loginfo(f"{self.node_id}: SessionManager:Initializing sessions service")
-        self.server = rospy.Service('call', FunctionCall, self.handle_function_call)
-        self.server.wait_for_service()
+        self.server = rospy.Service(f"/{self.node_id}/sessions/call", FunctionCall, self.handle_function_call)
+        #define key store proxy
+        rospy.loginfo(f"{self.node_id}: Discovery:Initializing key store service")
+        self.key_store = rospy.ServiceProxy(f"/{self.node_id}/key_store/call", FunctionCall)
+        self.key_store.wait_for_service()
+        #get public and private key 
+        keys  = self.make_function_call(self.key_store,"get_rsa_key")
+        self.pk = keys["pk"]
+        self.sk = keys["sk"]
+        self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
         self.refresh_node_state_table()
         rospy.loginfo(f"{self.node_id}: SessionManager:Initialized successfully")
+        
         
         
     def handle_function_call(self,req):

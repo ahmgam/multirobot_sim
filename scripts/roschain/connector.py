@@ -20,8 +20,8 @@ class MQTTCommunicationModule:
         self.timeout = 5
         self.node = rospy.init_node('connector', anonymous=True)
         rospy.loginfo(f"{self.node_id}: Connector:Initializing publisher and subscriber")
-        self.publisher = rospy.Publisher('handle_message', String, queue_size=10)
-        self.subscriber = rospy.Subscriber('send_message', String, self.callback)
+        self.publisher = rospy.Publisher(f"/{self.node_id}/network/handle_message", String, queue_size=10)
+        self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback)
         rospy.loginfo(f"{self.node_id}: Connector:Initialized successfully")
 
     def __init_mqtt(self):

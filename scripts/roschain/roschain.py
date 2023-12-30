@@ -27,17 +27,17 @@ class RosChain:
         self.node = init_node("roschain", anonymous=True)
         #define records service
         loginfo(f"{self.node_id}: ROSChain:Initializing records service")
-        self.get_record_service = Service(f'get_records',GetBCRecords,lambda req: self.get_records(req))
+        self.get_record_service = Service(f"/{self.node_id}/roschain/get_records",GetBCRecords,lambda req: self.get_records(req))
         #define submit message service
         loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
-        self.submit_message_service = Service(f'submit_message',SubmitTransaction,self.submit_message)
+        self.submit_message_service = Service(f"/{self.node_id}/roschain/submit_message",SubmitTransaction,self.submit_message)
         #define blockchain service proxy 
         loginfo(f"{self.node_id}: ROSChain:Initializing blockchain service")
-        self.blockchain = ServiceProxy('blockchain/call', FunctionCall)
+        self.blockchain = ServiceProxy(f"/{self.node_id}/blockchain/call", FunctionCall)
         self.blockchain.wait_for_service()
         #define consensus service
         loginfo(f"{self.node_id}: ROSChain:Initializing consensus service")
-        self.consensus = ServiceProxy('consensus/call', FunctionCall)
+        self.consensus = ServiceProxy(f"/{self.node_id}/consensus/call", FunctionCall)
         self.consensus.wait_for_service()
         loginfo(f"{self.node_id}: RSOChain:Initialized successfully")
         
@@ -52,7 +52,7 @@ class RosChain:
         '''
         Send message to the given public key
         '''
-        loginfo(f"{self.node_id}: Task_allocator: {self.node_id} is sending message of type {args.table_name}")
+        loginfo(f"{self.node_id}: ROSChain: {self.node_id} is sending message of type {args.table_name}")
         table_name = args.table_name
         data = args.message
         msg_time = mktime(datetime.datetime.now().timetuple())

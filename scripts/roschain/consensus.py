@@ -31,23 +31,23 @@ class SBFT:
         self.node = init_node("consensus",anonymous=True)
         #define function call service
         loginfo(f"{self.node_id}: SBFT:Initializing function call service")
-        self.server = Service("call",FunctionCall,self.handle_function_call)
+        self.server = Service(f"/{self.node_id}/consensus/call",FunctionCall,self.handle_function_call)
         #init prepare message 
         loginfo(f"{self.node_id}: SBFT:Initializing publisher and subscriber")
-        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
+        self.prepare_message = Publisher(f"/{self.node_id}/network/prepare_message",String,queue_size=10)
         #message subscriber 
-        self.subscriber = Subscriber("consensus_handler",String,self.handle_message)
+        self.subscriber = Subscriber(f"/{self.node_id}/consensus/consensus_handler",String,self.handle_message)
         #init sessions
         loginfo(f"{self.node_id}: SBFT:Initializing sessions service")
-        self.sessions = ServiceProxy("sessions/call",FunctionCall,True)
+        self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call",FunctionCall,True)
         self.sessions.wait_for_service()
         #init blockchain
         loginfo(f"{self.node_id}: SBFT:Initializing blockchain service")
-        self.blockchain = ServiceProxy("blockchain/call",FunctionCall,True)
+        self.blockchain = ServiceProxy(f"/{self.node_id}/blockchain/call",FunctionCall,True)
         self.blockchain.wait_for_service()
         #define key store proxy
         loginfo(f"{self.node_id}: SBFT:Initializing key store service")
-        self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        self.key_store = ServiceProxy(f"/{self.node_id}/key_store/call", FunctionCall)
         self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")

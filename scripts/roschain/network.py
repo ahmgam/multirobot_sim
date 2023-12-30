@@ -29,31 +29,31 @@ class NetworkInterface:
         self.node = init_node("network_interface", anonymous=True)
         #define server
         loginfo(f"{self.node_id}: NetworkInterface:Initializing network service")
-        self.server = Service('call', FunctionCall, self.handle_function_call)
+        self.server = Service(f"/{self.node_id}/network/call", FunctionCall, self.handle_function_call)
         #define queue
         self.queue = Queue()
         #define connector subscriber
         loginfo(f"{self.node_id}: NetworkInterface:Initializing connector subscriber")
-        self.subscriber = Subscriber('handle_message', String, self.to_queue,("handle",))
+        self.subscriber = Subscriber(f"/{self.node_id}/network/handle_message", String, self.to_queue,("handle",))
         #define network prepaeration service
-        self.prepare_subscriber = Subscriber('prepare_message', String, self.to_queue,("prepare",))
+        self.prepare_subscriber = Subscriber(f"/{self.node_id}/network/prepare_message", String, self.to_queue,("prepare",))
         #define connector publisher
-        self.publisher = Publisher('send_message', String, queue_size=10)
+        self.publisher = Publisher(f"/{self.node_id}/connector/send_message", String, queue_size=10)
         #define discovery publisher
-        self.discovery_publisher = Publisher('discovery_handler', String, queue_size=10)
+        self.discovery_publisher = Publisher(f"/{self.node_id}/discovery/discovery_handler", String, queue_size=10)
         #define heartbeat publisher
-        self.heartbeat_publisher = Publisher('heartbeat_handler', String, queue_size=10)
+        self.heartbeat_publisher = Publisher(f"/{self.node_id}/heartbeat/heartbeat_handler", String, queue_size=10)
         # Define consensus publisher
-        self.consensus_publisher = Publisher('consensus_handler', String, queue_size=10)
+        self.consensus_publisher = Publisher(f"/{self.node_id}/consensus/consensus_handler", String, queue_size=10)
         #Define sync publisher
-        self.sync_publisher = Publisher('sync_handler', String, queue_size=10)
+        self.sync_publisher = Publisher(f"/{self.node_id}/blockchain/sync_handler", String, queue_size=10)
         #define sessions service proxy
         loginfo(f"{self.node_id}: NetworkInterface:Initializing sessions service")
-        self.sessions = ServiceProxy('sessions/call', FunctionCall,True)
+        self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call", FunctionCall,True)
         self.sessions.wait_for_service()
         #define key store proxy
         loginfo(f"{self.node_id}: NetworkInterface:Initializing key store service")
-        self.key_store = ServiceProxy('key_store/call', FunctionCall)
+        self.key_store = ServiceProxy(f"/{self.node_id}/key_store/call", FunctionCall)
         self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")

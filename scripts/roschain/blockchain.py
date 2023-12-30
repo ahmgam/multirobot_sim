@@ -262,18 +262,18 @@ class Blockchain:
         loginfo(f"{node_id}: Blockchain: Initializing")
         node = init_node("blochchain",anonymous=True)
         #define blockchain service
-        self.server = Service("call",FunctionCall,self.handle_function_call)
+        self.server = Service(f"/{self.node_id}/blockchain/call",FunctionCall,self.handle_function_call)
         # define database manager
         loginfo(f"{self.node_id}: Blockchain:Initializing database proxy")
         self.db = Database(self.node_id)
         loginfo(f"{node_id}: blockchain: Initializing publisher & subscriber")
         #init network publisher
-        self.prepare_message = Publisher("prepare_message",String,queue_size=10)
+        self.prepare_message = Publisher(f"/{self.node_id}/network/prepare_message",String,queue_size=10)
         #init sync handler subscriper
-        self.subscriber = Subscriber("sync_handler",String,self.handle_sync)
+        self.subscriber = Subscriber(f"/{self.node_id}/blockchain/sync_handler",String,self.handle_sync)
         #init sessions
         loginfo(f"{self.node_id}: Blockchain:Initializing database proxy")
-        self.sessions = ServiceProxy("sessions/call",FunctionCall,True)
+        self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call",FunctionCall,True)
         self.sessions.wait_for_service()
         # create tables
         self.create_tables()

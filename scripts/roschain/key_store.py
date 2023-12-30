@@ -21,7 +21,7 @@ class EncryptionManager:
             self.store_keys(public_key_file, private_key_file, self.pk, self.sk)
         self.node = init_node("key_store", anonymous=True)
         loginfo(f"{self.node_id}: key_store: Initializing key store service")
-        self.server = Service('call', FunctionCall, self.handle_function_call)
+        self.server = Service(f"/{self.node_id}/key_store/call", FunctionCall, self.handle_function_call)
         loginfo(f"{self.node_id}: key_store:Initialized successfully")
         
     @staticmethod
