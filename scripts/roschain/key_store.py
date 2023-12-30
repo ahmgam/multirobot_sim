@@ -107,17 +107,17 @@ class EncryptionManager:
 if __name__ == "__main__":
     ns = get_namespace()
     try :
-        node_id= get_param(f'{ns}/key_store/node_id') # node_name/argsname
+        node_id= get_param(f'{ns}key_store/node_id') # node_name/argsname
         loginfo(f"key_store: Getting node_id argument, and got : {node_id}")
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_id")
     try :
-        public_key_file= get_param(f'{ns}/key_store/public_key_file') # node_name/argsname
+        public_key_file= get_param(f'{ns}key_store/public_key_file') # node_name/argsname
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : public_key_file")
     
     try:
-        private_key_file= get_param(f'{ns}/key_store/private_key_file') # node_name/argsname
+        private_key_file= get_param(f'{ns}key_store/private_key_file') # node_name/argsname
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : private_key_file")
     

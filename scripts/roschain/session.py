@@ -168,7 +168,7 @@ class SessionManager:
 if __name__ == "__main__":
     ns = rospy.get_namespace()
     try :
-        node_id= rospy.get_param(f'{ns}/roschain/node_id') # node_name/argsname
+        node_id= rospy.get_param(f'{ns}roschain/node_id') # node_name/argsname
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : node_id")
     session = SessionManager(node_id)

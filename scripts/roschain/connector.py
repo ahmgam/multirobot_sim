@@ -85,25 +85,25 @@ if __name__ == '__main__':
     ns = rospy.get_namespace()
     
     try :
-        node_id= rospy.get_param(f'{ns}/connector/node_id') # node_name/argsname
+        node_id= rospy.get_param(f'{ns}connector/node_id') # node_name/argsname
         rospy.loginfo(f"connector: Getting node_id argument, and got : {node_id}")
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : node_id")
     
     try :
-        endpoint= rospy.get_param(f'{ns}/connector/endpoint') # node_name/argsname
+        endpoint= rospy.get_param(f'{ns}connector/endpoint') # node_name/argsname
         rospy.loginfo(f"connector: Getting endpoint argument, and got : {endpoint}")
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : endpoint")
     
     try :
-        port= rospy.get_param(f'{ns}/connector/port') # node_name/argsname
+        port= rospy.get_param(f'{ns}connector/port') # node_name/argsname
         rospy.loginfo(f"connector: Getting port argument, and got : {port}")
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : port")
     
     try:
-        auth = rospy.get_param(f'{ns}/connector/auth') # node_name/argsname
+        auth = rospy.get_param(f'{ns}connector/auth') # node_name/argsname
         rospy.loginfo(f"connector: Getting auth argument, and got : {auth}")
     except:
         auth = None

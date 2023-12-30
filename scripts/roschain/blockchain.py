@@ -778,19 +778,19 @@ if __name__ == "__main__":
     #get namespace 
     ns = get_namespace()
     try :
-        node_id= get_param(f'{ns}/blockchain/node_id') # node_name/argsname
+        node_id= get_param(f'{ns}blockchain/node_id') # node_name/argsname
         loginfo(f"Blockchain: Getting node_id argument, and got : {node_id}")
     except KeyError:
         raise ROSInterruptException("Invalid arguments : node_id")
     
     try :
-        node_type= get_param(f'{ns}/blockchain/node_type') # node_name/argsname
+        node_type= get_param(f'{ns}blockchain/node_type') # node_name/argsname
         loginfo(f"Blockchain: Getting node_type argument, and got : {node_type}")
     except KeyError:
         raise ROSInterruptException("Invalid arguments : node_type")
     
     try :
-        secret = get_param(f'{ns}/blockchain/secret') # node_name/argsname
+        secret = get_param(f'{ns}blockchain/secret') # node_name/argsname
         loginfo(f"Blockchain: Getting secret argument, and got : {secret}")
     except KeyError:
         raise ROSInterruptException("Invalid arguments : secret")

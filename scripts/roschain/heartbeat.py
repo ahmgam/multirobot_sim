@@ -153,13 +153,13 @@ if __name__ == '__main__':
     ns = get_namespace()
     
     try :
-        node_id= get_param(f'{ns}/discovery/node_id') # node_name/argsname
+        node_id= get_param(f'{ns}discovery/node_id') # node_name/argsname
         loginfo(f"discovery: Getting node_id argument, and got : {node_id}")
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_id")
     
     try :
-        node_type= get_param(f'{ns}/discovery/node_type') # node_name/argsname
+        node_type= get_param(f'{ns}discovery/node_type') # node_name/argsname
         loginfo(f"discovery: Getting endpoint argument, and got : {node_type}")
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_type")

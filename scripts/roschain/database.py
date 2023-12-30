@@ -80,20 +80,20 @@ class Database (object):
 if __name__ == "__main__":
     ns = rospy.get_namespace()
     try :
-        node_id= rospy.get_param(f'{ns}/database/node_id') # node_name/argsname
+        node_id= rospy.get_param(f'{ns}database/node_id') # node_name/argsname
         rospy.loginfo("Database: Getting node_id argument, and got : ", node_id)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : node_id")
 
     try :
-        db_dir= rospy.get_param(f'{ns}/database/db_dir') # node_name/argsname
+        db_dir= rospy.get_param(f'{ns}database/db_dir') # node_name/argsname
         rospy.loginfo("Database: Getting db_dir argument, and got : ", db_dir)
 
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : db_dir")
     
-    schema= rospy.get_param(f'{ns}/database/schema',None) # node_name/argsname
+    schema= rospy.get_param(f'{ns}database/schema',None) # node_name/argsname
     rospy.loginfo("Database: Getting shcema argument, and got : ", schema)
 
     
