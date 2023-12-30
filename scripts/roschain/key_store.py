@@ -77,7 +77,7 @@ class EncryptionManager:
     @staticmethod
     def format_private_key(sk):
         # Convert the byte string to a normal string
-        sk = str(sk.save_pkcs1()).decode('ascii')
+        sk = str(sk.save_pkcs1().decode('ascii'))
         # Remove the new line characters and the header and footer
         sk = sk.replace('\n-----END RSA PRIVATE KEY-----\n', '').replace('-----BEGIN RSA PRIVATE KEY-----\n','')
         return sk

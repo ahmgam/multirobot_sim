@@ -17,7 +17,7 @@ class DummyTransactions:
         self.pos_y = None
         self.last_state_update = datetime.now()
         rospy.loginfo(f"{self.node_id}: dummy_transactions: Initializing get_records service client")
-        self.submit_message = ServiceProxy(f'submit_message',SubmitTransaction)
+        self.submit_message = ServiceProxy(f'{self.node_id}/roschain/submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
     
     def getParameters(self):

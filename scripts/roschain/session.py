@@ -25,11 +25,16 @@ class SessionManager:
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]
         self.sk = keys["sk"]
-        self.node_states = OrderedDict({self.parent.node_id:{"pk":EncryptionModule.format_public_key(self.parent.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
+        self.node_states = OrderedDict({self.node_id:{"pk":EncryptionModule.format_public_key(self.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
         self.refresh_node_state_table()
         rospy.loginfo(f"{self.node_id}: SessionManager:Initialized successfully")
         
-        
+    def make_function_call(self,service,function_name,*args):
+        args = json.dumps(args)
+        response = service(function_name,args).response
+        if response == r"{}":
+            return None
+        return json.loads(response)
         
     def handle_function_call(self,req):
         #get function name and arguments from request
