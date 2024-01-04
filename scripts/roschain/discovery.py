@@ -117,6 +117,7 @@ class DiscoveryProtocol:
             "target": "all",
             "time":mktime(datetime.datetime.now().timetuple()),
             "message": EncryptionModule.format_public_key(self.pk),
+            "type": "discovery_request",
             "signed":True}))
 
     def respond_to_discovery(self,message):
@@ -155,6 +156,7 @@ class DiscoveryProtocol:
         self.publisher.publish(json.dumps({"target": message.message["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
                                       "message": msg_data,
+                                      "type": "discovery_response",
                                       "signed":True}))
     
     def verify_discovery(self,message):
@@ -200,6 +202,7 @@ class DiscoveryProtocol:
         self.publisher.publish(json.dumps({"target": message.message["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
                                       "message": msg_data,
+                                      "type": "discovery_verification",
                                       "signed":True}))
  
     def verify_discovery_response(self,message):
@@ -253,6 +256,7 @@ class DiscoveryProtocol:
             "target": message.message["node_id"],
             "time":mktime(datetime.datetime.now().timetuple()),
             "message": msg_data,
+            "type": "discovery_verification_response",
             "signed":True}))
 
     def approve_discovery(self,message):
@@ -311,6 +315,7 @@ class DiscoveryProtocol:
         self.publisher.publish(json.dumps({"target": message.message["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
                                       "message": msg_data,
+                                      "type": "discovery_approval",
                                       "signed":True}))
             
     def approve_discovery_response(self,message):
@@ -372,6 +377,7 @@ class DiscoveryProtocol:
             "target": message.message["node_id"],
             "time":mktime(datetime.datetime.now().timetuple()),
             "message": msg_data,
+            "type": "discovery_approval_response",
             "signed":True}))
 
     def finalize_discovery(self,message):

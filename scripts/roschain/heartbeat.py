@@ -89,7 +89,7 @@ class HeartbeatProtocol:
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
         #call network service
-        self.prepare_message.publish(json.dumps({"message":msg_data,"target":session["node_id"]}))
+        self.prepare_message.publish(json.dumps({"message":msg_data,"type":"heartbeat_request","target":session["node_id"]}))
         
            
     def handle_heartbeat(self,message):
@@ -121,7 +121,7 @@ class HeartbeatProtocol:
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
         #call network service
-        self.prepare_message.publish(json.dumps({"message":msg_data,"target":session["node_id"]}))
+        self.prepare_message.publish(json.dumps({"message":msg_data,"type":"heartbeat_response","target":session["node_id"]}))
  
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node

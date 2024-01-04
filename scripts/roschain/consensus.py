@@ -171,7 +171,7 @@ class SBFT:
         msg["signature"] = msg_signature
         
         #broadcast message to the network
-        self.prepare_message.publish(json.dumps({"message":msg,"target":"all"}))
+        self.prepare_message.publish(json.dumps({"message":msg,"type":"data_exchange","target":"all"}))
     
     def pre_prepare(self,msg):
         #handle pre-prepare message
@@ -225,7 +225,7 @@ class SBFT:
             "node_ids":msg['node_ids']
         }
         #send_message
-        self.prepare_message.publish(json.dumps({"message":payload,"target":msg['source']}))
+        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":msg['source']}))
     
     def prepare(self,msg):
         #handle prepare message
@@ -292,7 +292,7 @@ class SBFT:
         self.views[view_id]["status"] = "prepare"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #broadcast message
-        self.prepare_message.publish(json.dumps({"message":payload,"target":"all"}))
+        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all"}))
         
     
     def prepare_collect(self,msg):
@@ -366,7 +366,7 @@ class SBFT:
         #update view
         self.views[view_id]["status"] = "commit"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
-        self.prepare_message.publish(json.dumps({"message":payload,"target":view["source"]}))
+        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":view["source"]}))
     def commit(self,msg):
         #handle commit message
         #check if view exists
@@ -433,7 +433,7 @@ class SBFT:
         except Exception as e:
             print(f"{self.node_id}: ERROR : {e}")
         #broadcast message
-        self.prepare_message.publish(json.dumps({"message":payload,"target":"all"}))
+        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all"}))
     
     def commit_collect(self,msg):
         #handle commit-collect message
