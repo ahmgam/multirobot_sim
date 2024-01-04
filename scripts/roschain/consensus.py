@@ -51,8 +51,7 @@ class SBFT:
         self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
-        self.pk = keys["pk"]
-        self.sk = keys["sk"]
+        self.pk,self.sk =EncryptionModule.reconstruct_keys(keys["pk"],keys["sk"])
         # queue
         self.queue = Queue()
         loginfo(f"{self.node_id}: SBFT:Initialized successfully")

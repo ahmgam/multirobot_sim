@@ -100,7 +100,7 @@ class EncryptionManager:
         
     def handle_function_call(self, req):
         if req.function_name == "get_rsa_key":
-            return FunctionCallResponse(json.loads(self.get_rsa_key()))
+            return FunctionCallResponse(json.dumps(self.get_rsa_key()))
         else:
             return FunctionCallResponse(r"{}")
         

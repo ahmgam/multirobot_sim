@@ -57,8 +57,7 @@ class NetworkInterface:
         self.key_store.wait_for_service()
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
-        self.pk = keys["pk"]
-        self.sk = keys["sk"]
+        self.pk,self.sk =EncryptionModule.reconstruct_keys(keys["pk"],keys["sk"])
         #define is_initialized
         loginfo(f"{self.node_id}: NetworkInterface:Initialized successfully")
         
@@ -87,7 +86,7 @@ class NetworkInterface:
         '''
         Add message to queue
         '''        
-        self.queue.put({"type":type,"data":json.dumps(message.data)})
+        self.queue.put({"type":type[0],"data":json.loads(message.data)})
      
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -261,6 +260,6 @@ if __name__ == "__main__":
             elif message["type"] == "prepare":
                 network.send_message(message["data"]["type"],message["data"]["target"],message["data"]["message"],message["data"].get("signed",False))
             else:
-                loginfo(f"{network.node_id}: Invalid message type on network node")
+                loginfo(f"{network.node_id}: Invalid message type on network node, message : {message}")
         rate.sleep()
    

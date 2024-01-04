@@ -105,6 +105,22 @@ class EncryptionModule:
     @staticmethod
     def reformat_public_key(pk):
         return f"-----BEGIN RSA PUBLIC KEY-----\n{str(pk)}\n-----END RSA PUBLIC KEY-----\n"
+    
+    @staticmethod
+    def reconstruct_keys(pk,sk):
+        #check if key pairs start with header and end with footer
+        if not str(pk).startswith("-----BEGIN RSA PUBLIC KEY-----\n"):
+            pk = f"-----BEGIN RSA PUBLIC KEY-----\n{str(pk)}"
+        if not str(pk).endswith("\n-----END RSA PUBLIC KEY-----\n"):
+            pk = f"{str(pk)}\n-----END RSA PUBLIC KEY-----\n"
+        if not str(sk).startswith("-----BEGIN RSA PRIVATE KEY-----\n"):
+            sk = f"-----BEGIN RSA PRIVATE KEY-----\n{str(sk)}"
+        if not str(sk).endswith("\n-----END RSA PRIVATE KEY-----\n"):
+            sk = f"{str(sk)}\n-----END RSA PRIVATE KEY-----\n"
+        #now load keys 
+        pk = rsa.PublicKey.load_pkcs1(pk.encode("ascii"))
+        sk = rsa.PrivateKey.load_pkcs1(sk.encode("ascii"))
+        return pk, sk
        
     @staticmethod 
     def generate_symmetric_key():

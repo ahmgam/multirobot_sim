@@ -25,7 +25,7 @@ class SessionManager:
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]
         self.sk = keys["sk"]
-        self.node_states = OrderedDict({self.node_id:{"pk":EncryptionModule.format_public_key(self.pk),"last_active":mktime(datetime.datetime.now().timetuple())}})
+        self.node_states = OrderedDict({self.node_id:{"pk":self.pk,"last_active":mktime(datetime.now().timetuple())}})
         self.refresh_node_state_table()
         rospy.loginfo(f"{self.node_id}: SessionManager:Initialized successfully")
         
@@ -61,7 +61,7 @@ class SessionManager:
         #create new session with the given public key and type
         data["node_id"] = node_id
         #add last call timestamp
-        data["last_active"] = mktime(datetime.datetime.now().timetuple())
+        data["last_active"] = mktime(datetime.now().timetuple())
         self.discovery_sessions[node_id]= data
             
     def update_discovery_session(self, node_id, data):
@@ -69,14 +69,14 @@ class SessionManager:
         for key,value in data.items():
             self.discovery_sessions[node_id][key] = value
         #update last call timestamp
-        self.discovery_sessions[node_id]["last_active"] = mktime(datetime.datetime.now().timetuple())
+        self.discovery_sessions[node_id]["last_active"] = mktime(datetime.now().timetuple())
         
     def get_discovery_session(self, node_id):
         #get all discovery sessions
         session = self.discovery_sessions.get(node_id,None)
         if session:
             #update last call timestamp
-            self.discovery_sessions[node_id]["last_active"] = mktime(datetime.datetime.now().timetuple()) 
+            self.discovery_sessions[node_id]["last_active"] = mktime(datetime.now().timetuple()) 
         return session
     
     def has_active_connection_session(self, node_id):
@@ -91,7 +91,7 @@ class SessionManager:
         session= self.connection_sessions.get(session_id,None)
         if session:
             #update last call timestamp
-            self.connection_sessions[session_id]["last_active"] = mktime(datetime.datetime.now().timetuple())
+            self.connection_sessions[session_id]["last_active"] = mktime(datetime.now().timetuple())
         return session
            
     def generate_session_id(self):
@@ -109,7 +109,7 @@ class SessionManager:
         for key,value in data.items():
             self.connection_sessions[session_id][key] = value
         #update last call timestamp
-        self.connection_sessions[session_id]["last_active"] = mktime(datetime.datetime.now().timetuple())
+        self.connection_sessions[session_id]["last_active"] = mktime(datetime.now().timetuple())
     
     def get_connection_session_by_node_id(self, node_id):
         #get connection session by node id
@@ -119,10 +119,10 @@ class SessionManager:
         return None
         
     def get_active_nodes(self):
-        return [session["node_id"] for session in self.connection_sessions.values() if session["last_active"] > mktime(datetime.datetime.now().timetuple())-60]
+        return [session["node_id"] for session in self.connection_sessions.values() if session["last_active"] > mktime(datetime.now().timetuple())-60]
 
     def get_active_nodes_with_pk(self):
-        return [{session["node_id"]:session["pk"]} for session in self.connection_sessions.values() if session["last_active"] > mktime(datetime.datetime.now().timetuple())-60]
+        return [{session["node_id"]:session["pk"]} for session in self.connection_sessions.values() if session["last_active"] > mktime(datetime.now().timetuple())-60]
     
     def get_node_state_table(self):
         #refresh node state table
@@ -130,7 +130,7 @@ class SessionManager:
         #get nodes in state table
         response = {}
         for key,value in self.node_states.items():
-            if value["last_active"] > mktime(datetime.datetime.now().timetuple())-60:
+            if value["last_active"] > mktime(datetime.now().timetuple())-60:
                 response[key] = value["pk"]
         return response
     
@@ -143,10 +143,10 @@ class SessionManager:
             #check if node is already in node state table
             if key in self.node_states.keys():
                 #update last call timestamp
-                self.node_states[key]["last_active"] = mktime(datetime.datetime.now().timetuple())
+                self.node_states[key]["last_active"] = mktime(datetime.now().timetuple())
                 continue
             #update last call timestamp
-            self.node_states[key] = {"pk":value,"last_active":mktime(datetime.datetime.now().timetuple())}
+            self.node_states[key] = {"pk":value,"last_active":mktime(datetime.now().timetuple())}
             
     def compare_node_state_table(self,table):
         #refresh node state table
@@ -167,7 +167,7 @@ class SessionManager:
             if value["node_id"] in self.node_states.keys():
                 continue
             else:
-                self.node_states[value["node_id"]] = {"pk":value["pk"],"last_active":mktime(datetime.datetime.now().timetuple())}
+                self.node_states[value["node_id"]] = {"pk":value["pk"],"last_active":mktime(datetime.now().timetuple())}
                 
     def get_connection_sessions(self):
         return self.connection_sessions
