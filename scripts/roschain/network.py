@@ -164,7 +164,7 @@ class NetworkInterface:
     def send_message(self,msg_type, target, message,signed=False):
         #define target sessions
         if target == "all":
-            node_ids = self.sessions("get_active_nodes",json.dumps([]))
+            node_ids = self.make_function_call(self.sessions,"get_active_nodes")
         elif type(target) == list:
             node_ids = target
         else:
@@ -212,7 +212,7 @@ class NetworkInterface:
             self.publisher.publish(json.dumps({
                 "target": session["node_id"],
                 "time":mktime(datetime.datetime.now().timetuple()),
-                "message": msg_payload,
+                "message": msg_payload
             }))
             
     def handle_message(self, message):
@@ -255,6 +255,7 @@ if __name__ == "__main__":
     while not is_shutdown():
         if not network.queue.empty():
             message = network.queue.get()
+            loginfo(f"{network.node_id}: Network: Handling message of type {message['data']['type']}")
             if message["type"] == "handle":
                 network.handle_message(message["data"])
             elif message["type"] == "prepare":

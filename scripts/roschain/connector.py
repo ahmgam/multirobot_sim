@@ -6,7 +6,7 @@ from std_msgs.msg import String
 from paho.mqtt import client as mqtt_client
 from collections import OrderedDict
 class MQTTCommunicationModule:
-    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
+    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=True):
         self.node_id = node_id
         self.endpoint = endpoint
         self.port = port
@@ -15,13 +15,13 @@ class MQTTCommunicationModule:
         self.base_topic = "nodes"
         self.log_topic = 'logs'
         self.buffer = Queue()
+        self.node = rospy.init_node('connector', anonymous=True)
         self.__init_mqtt()
         self.counter = 0
         self.timeout = 5
-        self.node = rospy.init_node('connector', anonymous=True)
         rospy.loginfo(f"{self.node_id}: Connector:Initializing publisher and subscriber")
         self.publisher = rospy.Publisher(f"/{self.node_id}/network/handle_message", String, queue_size=10)
-        self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback)
+        self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback,callback_args="outgoing")
         rospy.loginfo(f"{self.node_id}: Connector:Initialized successfully")
 
     def __init_mqtt(self):
@@ -38,10 +38,12 @@ class MQTTCommunicationModule:
             rospy.loginfo(f"{self.node_id}: Error connecting to MQTT: {e}")
             return
     def callback(self, data):
-        self.send(json.loads(data.data))
+        self.buffer.put({"data":json.loads(data.data),"type":"outgoing"})
 
     def on_message(self, client, userdata, message):
-        self.publisher.publish(json.dumps({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"}))
+        #self.publisher.publish(json.dumps({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"}))
+        self.buffer.put({"data":json.loads(message),"type":"incoming"})
+        
 
     def on_connect(self, client, userdata, flags, rc):
         rospy.loginfo(f"{self.node_id}: Connected with result code " + str(rc))
@@ -50,7 +52,7 @@ class MQTTCommunicationModule:
         
     def send(self, message):
         if self.DEBUG:
-            rospy.loginfo(f'{self.node_id}: Sending message to {message["target"]} with type {message["message"]["type"]}')
+            rospy.loginfo(f'{self.node_id}: Connector: Sending message to {message["target"]} with type {message["message"]["type"]}')
         #parse message to string
         if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
           message["message"] = json.dumps(message["message"])
@@ -112,4 +114,10 @@ if __name__ == '__main__':
     auth = str(auth).split(":")
     auth = {"username":auth[0],"password":auth[1]}
     node = MQTTCommunicationModule(node_id,endpoint,port,auth)
-    rospy.spin()
+    while not rospy.is_shutdown():
+        if node.is_available():
+            msg = node.get()
+            if msg["type"] == "incoming":
+                node.publisher.publish(json.dumps(msg))
+            elif msg["type"] == "outgoing":
+                node.send(msg["data"])

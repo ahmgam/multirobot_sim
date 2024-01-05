@@ -62,7 +62,7 @@ class RosChain:
             "time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
         }
         #payload 
-        payload = {
+        payload ={
             "message":message,
             "source":self.node_id,
             "timestamp":msg_time

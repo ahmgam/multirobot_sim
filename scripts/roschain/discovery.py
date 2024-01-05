@@ -113,6 +113,7 @@ class DiscoveryProtocol:
     ################################
     def discover(self):
         #discover new nodes on the network
+        loginfo(f"{self.node_id}: Starting discovery")
         self.publisher.publish(json.dumps({
             "target": "all",
             "time":mktime(datetime.datetime.now().timetuple()),

@@ -53,7 +53,7 @@ class DummyTransactions:
             
     def submit_node_state(self):
         #submit node state to blockchain
-        print('submit node state')
+        rospy.loginfo(f"{self.node_id}: dummy_transactions: Submitting node state")
         payload = {
             'node_id':self.node_id,
             'node_type':self.node_type,

@@ -169,7 +169,6 @@ class SBFT:
         msg_signature = EncryptionModule.sign(msg_data,self.sk)
         #add signature to message
         msg["signature"] = msg_signature
-        
         #broadcast message to the network
         self.prepare_message.publish(json.dumps({"message":msg,"type":"data_exchange","target":"all"}))
     
