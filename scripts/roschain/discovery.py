@@ -60,7 +60,7 @@ class DiscoveryProtocol:
             self.discover()
             
     def put_queue(self,message):
-        self.queue.put(json.loads(message))
+        self.queue.put(json.loads(message.data))
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -70,32 +70,32 @@ class DiscoveryProtocol:
         return json.loads(response)
 
     def handle(self,message):
-        if message.message["type"] == "discovery_request":
+        if message["type"] == "discovery_request":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting response_to_discovery")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting response_to_discovery")
             self.respond_to_discovery(message)
-        elif message.message["type"] == "discovery_response":
+        elif message["type"] == "discovery_response":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting verify_discovery")
             self.verify_discovery(message)
-        elif message.message["type"] == "discovery_verification":
+        elif message["type"] == "discovery_verification":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting verify_discovery_response")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting verify_discovery_response")
             self.verify_discovery_response(message)
-        elif message.message["type"] == "discovery_verification_response":
+        elif message["type"] == "discovery_verification_response":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting approve_discovery")
             self.approve_discovery(message)
-        elif message.message["type"] == "discovery_approval":
+        elif message["type"] == "discovery_approval":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting approve_discovery_response")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting approve_discovery_response")
             self.approve_discovery_response(message)
-        elif message.message["type"] == "discovery_approval_response":
+        elif message["type"] == "discovery_approval_response":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, starting finalize_discovery")
+                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting finalize_discovery")
             self.finalize_discovery(message)
         else:
-            loginfo(f"{self.node_id}: Received message from {message.message['node_id']} of type {message.message['type']}, but no handler found")
+            loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, but no handler found")
     ################################
     # Challenge management
     ################################   
@@ -117,7 +117,7 @@ class DiscoveryProtocol:
         self.publisher.publish(json.dumps({
             "target": "all",
             "time":mktime(datetime.datetime.now().timetuple()),
-            "message": EncryptionModule.format_public_key(self.pk),
+            "message":{ 'pk':EncryptionModule.format_public_key(self.pk)},
             "type": "discovery_request",
             "signed":True}))
 
@@ -125,7 +125,7 @@ class DiscoveryProtocol:
         #respond to discovery requests and send challenge
         #first verify the message
         try:
-            message = DiscoveryMessage(message.message) 
+            message = DiscoveryMessage(message) 
         except Exception as e:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: validation error {e}")
@@ -145,7 +145,6 @@ class DiscoveryProtocol:
             session_data = {
                 "pk": message.message["message"]["data"]["pk"],
                 "role":"server",
-                "counter": message.message["message"]["counter"],
                 "node_type": message.message["node_type"],     
             }
             self.make_function_call(self.sessions,"create_discovery_session",message.message["node_id"],session_data)
@@ -163,7 +162,7 @@ class DiscoveryProtocol:
     def verify_discovery(self,message):
         #verify discovery request and send challenge response
         #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message.message["node_id"]):
+        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
             if self.DEBUG:    
                 loginfo(f"{self.node_id}: connection session is already active")
             return None
@@ -209,19 +208,19 @@ class DiscoveryProtocol:
     def verify_discovery_response(self,message):
         #verify discovery response and add node to the network
         #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message.message["node_id"]):
+        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
             if self.DEBUG:
                 loginfo(f"{self.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
             return None
         #verify the message s
         try :
-            message=VerificationMessage(message.message)
+            message=VerificationMessage(message)
         except Exception as e:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: error validating message : {e}")
@@ -263,19 +262,19 @@ class DiscoveryProtocol:
     def approve_discovery(self,message):
         #approve discovery request and send approval response
         #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message.message["node_id"]):
+        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
             if self.DEBUG:
                 loginfo(f"{self.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
             return None
         #verify the message
         try :
-            message=VerificationResponseMessage(message.message)
+            message=VerificationResponseMessage(message)
         except Exception as e:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: error validating message : {e}")
@@ -322,19 +321,19 @@ class DiscoveryProtocol:
     def approve_discovery_response(self,message):
         #approve discovery response and add node to the network
         #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message.message["node_id"]):
+        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
             if self.DEBUG:
                 loginfo(f"{self.node_id}: connection session is already active")
             return None
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
             return None
         #validate the message
         try :
-            message=ApprovalMessage(message.message)
+            message=ApprovalMessage(message)
         except Exception as e:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: error validating message : {e}")
@@ -384,14 +383,14 @@ class DiscoveryProtocol:
     def finalize_discovery(self,message):
         #approve discovery response and add node to the network
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
             return None
         #validate the message
         try :
-            message=ApprovalResponseMessage(message.message)
+            message=ApprovalResponseMessage(message)
         except Exception as e:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: error validating message : {e}")

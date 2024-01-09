@@ -170,7 +170,7 @@ class SBFT:
         #add signature to message
         msg["signature"] = msg_signature
         #broadcast message to the network
-        self.prepare_message.publish(json.dumps({"message":msg,"type":"data_exchange","target":"all"}))
+        self.prepare_message.publish(json.dumps({"message":msg,"type":"data_exchange","target":"all_active"}))
     
     def pre_prepare(self,msg):
         #handle pre-prepare message
@@ -291,7 +291,7 @@ class SBFT:
         self.views[view_id]["status"] = "prepare"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #broadcast message
-        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all"}))
+        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all_active"}))
         
     
     def prepare_collect(self,msg):
@@ -432,7 +432,7 @@ class SBFT:
         except Exception as e:
             print(f"{self.node_id}: ERROR : {e}")
         #broadcast message
-        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all"}))
+        self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all_active"}))
     
     def commit_collect(self,msg):
         #handle commit-collect message

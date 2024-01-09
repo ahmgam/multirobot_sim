@@ -96,17 +96,17 @@ class NetworkInterface:
         return json.loads(response)
     def verify_data(self,message):
         #check if message has session id
-        if message["session_id"] == "": 
+        if message.get("session_id",'') == "": 
             #the message has no session id, so it's discovery message
             #verify the message hash 
-            buff = message["message"]
+            buff = message
             msg_signature = buff.pop('signature')
             msg_data=buff
             #check if message is string
-            if type(message.message["message"]) is  str:
+            if type(message["message"]) is  str:
                 #the message is a string, so it's encrypted discovery message
                 #check if the node does not have active discovery session with the sender
-                session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])     
+                session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])     
                 #decrypt the message
                 try:
                     decrypted_data = EncryptionModule.decrypt(message.message["message"],self.sk)
@@ -117,7 +117,7 @@ class NetworkInterface:
                         loginfo(f"{self.node_id}: error decrypting and parsing data : {e}")
                     return None
                 #validate the message
-                message.message["message"] = decrypted_data
+                message["message"] = decrypted_data
                 if not session: 
                     #check if public key in decrypted message
                     if decrypted_data["data"].get("pk"):
@@ -129,8 +129,8 @@ class NetworkInterface:
                 
             else:
                 #the message is not a string, so it's not encrypted discovery message
-                session = {"pk":message.message["message"]["data"]["pk"]}
-                return message.message
+                session = {"pk":message["message"]["data"]["pk"]}
+                return message
             #verify the message signature
             if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
                 if self.DEBUG:    
@@ -160,60 +160,80 @@ class NetworkInterface:
                 return
             
             return message.message
+    def __prepare_message(self,msg_type, message,signed=False,session_id=None):
+        
+        #prepare message payload
+        msg_payload = OrderedDict({
+            "type": msg_type,
+            "time":mktime(datetime.datetime.now().timetuple()),
+            "node_id": self.node_id,
+            "node_type": self.node_type,
+            "session_id": session_id if session_id else '',
+            "message": message
+            })
+        #check if signed 
+        if signed:
+            msg_payload["signature"] = EncryptionModule.sign(json.dumps(msg_payload),self.sk)
+        return msg_payload
 
     def send_message(self,msg_type, target, message,signed=False):
         #define target sessions
         if target == "all":
-            node_ids = self.make_function_call(self.sessions,"get_active_nodes")
-        elif type(target) == list:
-            node_ids = target
-        else:
-            node_ids = [target]
-        #iterate over target sessions
-        for node_id in node_ids:
-            #check if node_id is local node_id 
-            if node_id == self.node_id:
-                continue
-            #get node_ids session 
-            session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",node_id)
-            if session == None:
-                #check if there is discovery session
-                session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
-                if session:
-                    #stringify message data
-                    msg_data = json.dumps(message["message"])
-                    #encrypt message data
-                    prepared_message = EncryptionModule.encrypt(msg_data,EncryptionModule.reformat_public_key(session["pk"]))
-                else:
-                    prepared_message= message["message"]
-            else:
-                #prepare message data
-                msg_data = OrderedDict({
+            #prepare message data
+            msg_data = OrderedDict({
                 "timestamp": str(datetime.datetime.now()),
                     "data":message
                     })
-                #stringify message data
-                msg_data = json.dumps(msg_data)
-                #encrypt message data
-                prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
-            #prepare message payload
-            msg_payload = OrderedDict({
-                "type": msg_type,
-                "time":mktime(datetime.datetime.now().timetuple()),
-                "node_id": self.node_id,
-                "node_type": self.node_type,
-                "session_id": message["session_id"],
-                "message": prepared_message
-                })
-            #check if signed 
-            if signed:
-                msg_payload["signature"] = EncryptionModule.sign(json.dumps(msg_payload),self.sk)
-            #add message to the queue
+            
+            msg_payload = self.__prepare_message(msg_type,msg_data,signed=signed)
             self.publisher.publish(json.dumps({
-                "target": session["node_id"],
-                "time":mktime(datetime.datetime.now().timetuple()),
-                "message": msg_payload
-            }))
+                    "target": 'all',
+                    "time":mktime(datetime.datetime.now().timetuple()),
+                    "message": msg_payload
+                }))
+        else:
+            if target == "all_active":
+                node_ids = self.make_function_call(self.sessions,"get_active_nodes")
+            elif type(target) == list:
+                node_ids = target
+            else:
+                node_ids = [target]
+            #iterate over target sessions
+            for node_id in node_ids:
+                #check if node_id is local node_id 
+                if node_id == self.node_id:
+                    continue
+                #get node_ids session 
+                session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",node_id)
+                if session == None:
+                    #check if there is discovery session
+                    session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
+                    if session:
+                        #stringify message data
+                        print(message)
+                        msg_data = json.dumps(message["message"])
+                        #encrypt message data
+                        prepared_message = EncryptionModule.encrypt(msg_data,EncryptionModule.reformat_public_key(session["pk"]))
+
+                else:
+                    #prepare message data
+                    msg_data = OrderedDict({
+                    "timestamp": str(datetime.datetime.now()),
+                        "data":message
+                        })
+                    #stringify message data
+                    msg_data = json.dumps(msg_data)
+                    #encrypt message data
+                    prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
+                #prepare message payload
+                msg_payload = self.__prepare_message(msg_type,prepared_message,signed=signed,session_id=session["session_id"])
+                #add message to the queue
+                self.publisher.publish(json.dumps({
+                    "target": session["node_id"],
+                    "time":mktime(datetime.datetime.now().timetuple()),
+                    "message": msg_payload
+                }))
+  
             
     def handle_message(self, message):
         #check message type

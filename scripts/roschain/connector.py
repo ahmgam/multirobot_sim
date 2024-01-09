@@ -21,7 +21,7 @@ class MQTTCommunicationModule:
         self.timeout = 5
         rospy.loginfo(f"{self.node_id}: Connector:Initializing publisher and subscriber")
         self.publisher = rospy.Publisher(f"/{self.node_id}/network/handle_message", String, queue_size=10)
-        self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback,callback_args="outgoing")
+        self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback)
         rospy.loginfo(f"{self.node_id}: Connector:Initialized successfully")
 
     def __init_mqtt(self):
@@ -42,7 +42,9 @@ class MQTTCommunicationModule:
 
     def on_message(self, client, userdata, message):
         #self.publisher.publish(json.dumps({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"}))
-        self.buffer.put({"data":json.loads(message),"type":"incoming"})
+        #convert message to json
+        self.buffer.put({"data":json.loads(message.payload.decode("utf-8")),"type":"incoming"})
+                
         
 
     def on_connect(self, client, userdata, flags, rc):
@@ -118,6 +120,6 @@ if __name__ == '__main__':
         if node.is_available():
             msg = node.get()
             if msg["type"] == "incoming":
-                node.publisher.publish(json.dumps(msg))
+                node.publisher.publish(json.dumps(msg['data']))
             elif msg["type"] == "outgoing":
                 node.send(msg["data"])
