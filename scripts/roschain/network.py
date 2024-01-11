@@ -101,7 +101,6 @@ class NetworkInterface:
             #verify the message hash 
             buff = message
             msg_signature = buff.pop('signature')
-            msg_data=buff
             #check if message is string
             if type(message["message"]) is  str:
                 #the message is a string, so it's encrypted discovery message
@@ -109,7 +108,7 @@ class NetworkInterface:
                 session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])     
                 #decrypt the message
                 try:
-                    decrypted_data = EncryptionModule.decrypt(message.message["message"],self.sk)
+                    decrypted_data = EncryptionModule.decrypt(message["message"],self.sk)
                     #parse the message
                     decrypted_data = json.loads(decrypted_data)
                 except Exception as e:
@@ -118,6 +117,8 @@ class NetworkInterface:
                     return None
                 #validate the message
                 message["message"] = decrypted_data
+                buff["message"] = decrypted_data
+                msg_data = json.dumps(buff)
                 if not session: 
                     #check if public key in decrypted message
                     if decrypted_data["data"].get("pk"):
@@ -133,6 +134,7 @@ class NetworkInterface:
                 return message
             #verify the message signature
             if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
+                raise Exception("Invalid signature")
                 if self.DEBUG:    
                     loginfo(f"{self.node_id}: signature not verified")
                 return None
@@ -160,6 +162,7 @@ class NetworkInterface:
                 return
             
             return message.message
+    
     def __prepare_message(self,msg_type, message,signed=False,session_id=None):
         
         #prepare message payload
@@ -175,17 +178,19 @@ class NetworkInterface:
         if signed:
             msg_payload["signature"] = EncryptionModule.sign(json.dumps(msg_payload),self.sk)
         return msg_payload
+    
 
     def send_message(self,msg_type, target, message,signed=False):
+        #prepare message payload
+        msg_data = OrderedDict({
+            "timestamp": str(datetime.datetime.now()),
+                "data":message
+                })
+        
+        msg_payload = self.__prepare_message(msg_type,msg_data,signed=signed)
         #define target sessions
         if target == "all":
             #prepare message data
-            msg_data = OrderedDict({
-                "timestamp": str(datetime.datetime.now()),
-                    "data":message
-                    })
-            
-            msg_payload = self.__prepare_message(msg_type,msg_data,signed=signed)
             self.publisher.publish(json.dumps({
                     "target": 'all',
                     "time":mktime(datetime.datetime.now().timetuple()),
@@ -207,29 +212,21 @@ class NetworkInterface:
                 session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",node_id)
                 if session == None:
                     #check if there is discovery session
-                    session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
-                    if session:
+                    discovery_session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
+                    if discovery_session:
                         #stringify message data
-                        print(message)
-                        msg_data = json.dumps(message["message"])
+                        msg_data = json.dumps(msg_data)
                         #encrypt message data
-                        prepared_message = EncryptionModule.encrypt(msg_data,EncryptionModule.reformat_public_key(session["pk"]))
-
+                        prepared_message = EncryptionModule.encrypt(msg_data,EncryptionModule.reformat_public_key(discovery_session["pk"]))
+                        msg_payload["message"] = prepared_message
                 else:
-                    #prepare message data
-                    msg_data = OrderedDict({
-                    "timestamp": str(datetime.datetime.now()),
-                        "data":message
-                        })
                     #stringify message data
                     msg_data = json.dumps(msg_data)
                     #encrypt message data
                     prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
-                #prepare message payload
-                msg_payload = self.__prepare_message(msg_type,prepared_message,signed=signed,session_id=session["session_id"])
                 #add message to the queue
                 self.publisher.publish(json.dumps({
-                    "target": session["node_id"],
+                    "target": node_id,
                     "time":mktime(datetime.datetime.now().timetuple()),
                     "message": msg_payload
                 }))
