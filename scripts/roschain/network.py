@@ -107,6 +107,15 @@ class NetworkInterface:
                 #check if the node does not have active discovery session with the sender
                 session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])     
                 #decrypt the message
+                if not session:
+                    #check if public key in decrypted message
+                    if decrypted_data["data"].get("pk"):
+                        session = {"pk":decrypted_data["data"]["pk"]}
+                    else:
+                        if self.DEBUG:
+                            loginfo(f"{self.node_id}: public key not found in decrypted message")
+                        return None
+                
                 try:
                     decrypted_data = EncryptionModule.decrypt(message["message"],self.sk)
                     #parse the message
@@ -118,26 +127,20 @@ class NetworkInterface:
                 #validate the message
                 message["message"] = decrypted_data
                 buff["message"] = decrypted_data
-                msg_data = json.dumps(buff)
-                if not session: 
-                    #check if public key in decrypted message
-                    if decrypted_data["data"].get("pk"):
-                        session = {"pk":decrypted_data["data"]["pk"]}
-                    else:
-                        if self.DEBUG:
-                            loginfo(f"{self.node_id}: public key not found in decrypted message")
-                        return None
+                
+                    
                 
             else:
                 #the message is not a string, so it's not encrypted discovery message
                 session = {"pk":message["message"]["data"]["pk"]}
-                return message
+                
             #verify the message signature
+            msg_data = json.dumps(buff)
             if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
-                raise Exception("Invalid signature")
                 if self.DEBUG:    
                     loginfo(f"{self.node_id}: signature not verified")
                 return None
+            return message
         else:
             #get session
             session = self.sessions("get_connection_sessions",json.dumps([message.message["session_id"]]))
@@ -154,13 +157,7 @@ class NetworkInterface:
                     loginfo(f"{self.node_id}: Invalid key")
                 return
             #validate message
-            message.message["message"] = json.loads(decrypted_msg)
-            #check counter
-            if message.message["message"]["counter"]<session["counter"]:
-                if self.DEBUG:
-                    loginfo(f"{self.node_id}: Invalid counter")
-                return
-            
+            message["message"] = json.loads(decrypted_msg)       
             return message.message
     
     def __prepare_message(self,msg_type, message,signed=False,session_id=None):
