@@ -2,7 +2,7 @@
 from messages import *
 from time import sleep,mktime
 import datetime
-from random import choices
+from random import choices,randint
 from string import ascii_lowercase
 from encryption import *
 from rospy import loginfo,init_node,Publisher,Subscriber,ServiceProxy,Rate,is_shutdown,get_namespace,get_param,ROSInterruptException
@@ -29,7 +29,7 @@ class DiscoveryProtocol:
         #define discovery interval
         self.discovery_interval = 10
         #define discovery last call
-        self.last_call = mktime(datetime.datetime.now().timetuple())
+        self.last_call = mktime(datetime.datetime.now().timetuple()) + randint(1,10)
         #publisher
         loginfo(f"{self.node_id}: Discovery:Initializing publisher and subscriber")
         self.publisher = Publisher(f"/{self.node_id}/network/prepare_message", String, queue_size=10)
@@ -70,6 +70,12 @@ class DiscoveryProtocol:
         return json.loads(response)
 
     def handle(self,message):
+        #check if the node is already connected to the network
+        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
+            if self.DEBUG:    
+                loginfo(f"{self.node_id}: connection session is already active")
+            return None
+        #first verify the me
         if message["type"] == "discovery_request":
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting response_to_discovery")
@@ -100,13 +106,23 @@ class DiscoveryProtocol:
     # Challenge management
     ################################   
     def generate_challenge(self, length=20):
-        return ''.join(choices(ascii_lowercase, k=length))
+        #generate string which changes every 1 minues
+        #first, get time related string
+        time_str = str(mktime(datetime.datetime.now().timetuple())//6)
+        #generate hash that are combination of time and secret
+        hash_str = EncryptionModule.hash(time_str+self.secret)
+        #return the first 20 characters
+        return hash_str[0:length]
     
     def solve_challenge(self,challenge):
         solution = EncryptionModule.hash(challenge+self.secret)
         client_sol = solution[0:len(solution)//2]
         server_sol = solution[len(solution)//2:]
         return client_sol, server_sol
+    
+    def generate_session_id(self):
+        #generate session id, random string of 32 characters
+        return ''.join(choices(ascii_lowercase, k=32))
       
     ################################
     # discovery protocol
@@ -130,13 +146,10 @@ class DiscoveryProtocol:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: validation error {e}")
             return None
-        #check if the node has active connection session with the sender        
-        if self.make_function_call(self.sessions,"has_active_connection_session",message.message["node_id"]):
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: connection session is already active") 
-            return None
         #check if the node has active discovery session with the sender
-        if self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"]):
+        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        print(session)
+        if session:
             if self.DEBUG:    
                 loginfo(f"{self.node_id}: discovery session is already active")
             return None
@@ -161,11 +174,6 @@ class DiscoveryProtocol:
     
     def verify_discovery(self,message):
         #verify discovery request and send challenge response
-        #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
-            if self.DEBUG:    
-                loginfo(f"{self.node_id}: connection session is already active")
-            return None
         #first verify the message     
         try :
             message=DiscoveryResponseMessage(message)
@@ -173,6 +181,14 @@ class DiscoveryProtocol:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: error validating message : {e}")
             return None
+        #check if the node has active discovery session with the sender
+        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        if session:
+            if session.get("challenge"):
+                if self.DEBUG:    
+                    loginfo(f"{self.node_id}: discovery session is already active")
+                return None
+            
         try:
             #generate challenge random string
             challenge = self.generate_challenge()
@@ -207,11 +223,6 @@ class DiscoveryProtocol:
  
     def verify_discovery_response(self,message):
         #verify discovery response and add node to the network
-        #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: connection session is already active")
-            return None
         #check if the node does not have active discovery session with the sender
         session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:
@@ -261,11 +272,6 @@ class DiscoveryProtocol:
 
     def approve_discovery(self,message):
         #approve discovery request and send approval response
-        #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: connection session is already active")
-            return None
         #check if the node does not have active discovery session with the sender
         session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:
@@ -289,14 +295,13 @@ class DiscoveryProtocol:
         #first generate symmetric key
         key = EncryptionModule.generate_symmetric_key()
         #get the session id
-        session_id = self.make_function_call(self.sessions,"generate_session_id")
+        session_id = self.generate_session_id()
         #create new session
         session_data = {
             "pk": session["pk"],
             "node_id": message.message["node_id"],
             "node_type": message.message["node_type"],
             "last_active": mktime(datetime.datetime.now().timetuple()),
-            "port": message.message["port"],
             "role": "server",   
             "session_id": session_id,
             "key": key,
@@ -320,11 +325,6 @@ class DiscoveryProtocol:
             
     def approve_discovery_response(self,message):
         #approve discovery response and add node to the network
-        #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: connection session is already active")
-            return None
         #check if the node does not have active discovery session with the sender
         session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
         if not session:

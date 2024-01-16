@@ -71,7 +71,7 @@ class DummyTransactions:
 
         if (datetime.now() - self.last_state_update).total_seconds() > self.update_interval:
             self.last_state_update = datetime.now()
-            self.submit_node_state() 
+            #self.submit_node_state() 
 
 
 if __name__ == "__main__":

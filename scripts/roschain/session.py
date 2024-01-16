@@ -93,10 +93,6 @@ class SessionManager:
             #update last call timestamp
             self.connection_sessions[session_id]["last_active"] = mktime(datetime.now().timetuple())
         return session
-           
-    def generate_session_id(self):
-        #generate session id, random string of 32 characters
-        return ''.join(choices(ascii_uppercase + digits, k=32))
         
     def create_connection_session(self, session_id, data):
         #create new session with the given public key and type

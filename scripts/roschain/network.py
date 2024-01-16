@@ -105,17 +105,9 @@ class NetworkInterface:
             if type(message["message"]) is  str:
                 #the message is a string, so it's encrypted discovery message
                 #check if the node does not have active discovery session with the sender
-                session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])     
-                #decrypt the message
+                session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
                 if not session:
-                    #check if public key in decrypted message
-                    if decrypted_data["data"].get("pk"):
-                        session = {"pk":decrypted_data["data"]["pk"]}
-                    else:
-                        if self.DEBUG:
-                            loginfo(f"{self.node_id}: public key not found in decrypted message")
-                        return None
-                
+                    session = {"pk": self.pk}
                 try:
                     decrypted_data = EncryptionModule.decrypt(message["message"],self.sk)
                     #parse the message
@@ -127,8 +119,6 @@ class NetworkInterface:
                 #validate the message
                 message["message"] = decrypted_data
                 buff["message"] = decrypted_data
-                
-                    
                 
             else:
                 #the message is not a string, so it's not encrypted discovery message
@@ -269,7 +259,7 @@ if __name__ == "__main__":
     while not is_shutdown():
         if not network.queue.empty():
             message = network.queue.get()
-            loginfo(f"{network.node_id}: Network: Handling message of type {message['data']['type']}")
+            #loginfo(f"{network.node_id}: Network: Handling message of type {message['data']['type']}")
             if message["type"] == "handle":
                 network.handle_message(message["data"])
             elif message["type"] == "prepare":
