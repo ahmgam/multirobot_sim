@@ -106,8 +106,6 @@ class NetworkInterface:
                 #the message is a string, so it's encrypted discovery message
                 #check if the node does not have active discovery session with the sender
                 session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
-                if not session:
-                    session = {"pk": self.pk}
                 try:
                     decrypted_data = EncryptionModule.decrypt(message["message"],self.sk)
                     #parse the message
@@ -119,6 +117,8 @@ class NetworkInterface:
                 #validate the message
                 message["message"] = decrypted_data
                 buff["message"] = decrypted_data
+                if not session:
+                    session = {"pk": decrypted_data["data"]["pk"]}
                 
             else:
                 #the message is not a string, so it's not encrypted discovery message
@@ -197,7 +197,13 @@ class NetworkInterface:
                     continue
                 #get node_ids session 
                 session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",node_id)
-                if session == None:
+                if session != None and session["approved"]:
+                    #stringify message data
+                    msg_data = json.dumps(msg_data)
+                    #encrypt message data
+                    prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
+                    msg_payload["message"] = prepared_message
+                else:
                     #check if there is discovery session
                     discovery_session = self.make_function_call(self.sessions,"get_discovery_session",node_id)
                     if discovery_session:
@@ -206,11 +212,7 @@ class NetworkInterface:
                         #encrypt message data
                         prepared_message = EncryptionModule.encrypt(msg_data,EncryptionModule.reformat_public_key(discovery_session["pk"]))
                         msg_payload["message"] = prepared_message
-                else:
-                    #stringify message data
-                    msg_data = json.dumps(msg_data)
-                    #encrypt message data
-                    prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
+                    
                 #add message to the queue
                 self.publisher.publish(json.dumps({
                     "target": node_id,

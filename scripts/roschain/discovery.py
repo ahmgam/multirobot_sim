@@ -148,7 +148,6 @@ class DiscoveryProtocol:
             return None
         #check if the node has active discovery session with the sender
         session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
-        print(session)
         if session:
             if self.DEBUG:    
                 loginfo(f"{self.node_id}: discovery session is already active")
@@ -366,7 +365,6 @@ class DiscoveryProtocol:
             "last_heartbeat": mktime(datetime.datetime.now().timetuple()),
             "approved": True
         }
-        self.make_function_call(self.sessions,"create_connection_session",session_id,session_data)
         #prepare approval message
         msg_data = {
             "session_id": session_id,
@@ -379,6 +377,9 @@ class DiscoveryProtocol:
             "message": msg_data,
             "type": "discovery_approval_response",
             "signed":True}))
+        #delay for 1 second
+        sleep(1)
+        self.make_function_call(self.sessions,"create_connection_session",session_id,session_data)
 
     def finalize_discovery(self,message):
         #approve discovery response and add node to the network
