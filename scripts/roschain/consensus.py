@@ -45,6 +45,8 @@ class SBFT:
         loginfo(f"{self.node_id}: SBFT:Initializing blockchain service")
         self.blockchain = ServiceProxy(f"/{self.node_id}/blockchain/call",FunctionCall,True)
         self.blockchain.wait_for_service()
+        #define blockchain publisher 
+        self.blockchain_publisher = Publisher(f"/{self.node_id}/blockchain/blockchain_handler",String,queue_size=10)
         #define key store proxy
         loginfo(f"{self.node_id}: SBFT:Initializing key store service")
         self.key_store = ServiceProxy(f"/{self.node_id}/key_store/call", FunctionCall)
@@ -428,7 +430,13 @@ class SBFT:
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #push message to output queue
         try:
-            self.parent.queues.put_output_queue(view["message"],view["source"],"dict",view["timestamp"])
+            self.blockchain_publisher.publish(json.dumps({
+                "data":view["message"],
+                "type":"blockchain_data",
+                "source":view["source"],
+                "format":"dict",
+                "time":view["timestamp"]
+                }))
         except Exception as e:
             print(f"{self.node_id}: ERROR : {e}")
         #broadcast message
@@ -485,7 +493,13 @@ class SBFT:
         self.views[view_id]["status"] = "complete"
         self.views[view_id]["last_updated"] = mktime(datetime.datetime.now().timetuple())
         #push message to output queue
-        self.parent.queues.put_output_queue(view["message"],view["source"],"dict",view["timestamp"])
+        self.blockchain_publisher.publish(json.dumps({
+            "data":view["message"],
+            "type":"blockchain_data",
+            "source":view["source"],
+            "format":"dict",
+            "time":view["timestamp"]
+            }))
     
     #TODO implement view change
     def generate_view_id(self,length=8):
@@ -507,7 +521,7 @@ if __name__ == "__main__":
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_type")
     #define consensus
-    consensus = SBFT(node_id,node_type)
+    consensus = SBFT(node_id,node_type,True)
   
     rate = Rate(10)
     #start cron

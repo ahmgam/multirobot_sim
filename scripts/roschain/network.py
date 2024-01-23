@@ -100,7 +100,9 @@ class NetworkInterface:
             #the message has no session id, so it's discovery message
             #verify the message hash 
             buff = message
-            msg_signature = buff.pop('signature')
+            msg_signature = buff.get('signature')
+            if msg_signature != None:
+                del buff['signature']
             #check if message is string
             if type(message["message"]) is  str:
                 #the message is a string, so it's encrypted discovery message
@@ -125,15 +127,16 @@ class NetworkInterface:
                 session = {"pk":message["message"]["data"]["pk"]}
                 
             #verify the message signature
-            msg_data = json.dumps(buff)
-            if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
-                if self.DEBUG:    
-                    loginfo(f"{self.node_id}: signature not verified")
-                return None
+            if msg_signature:
+                msg_data = json.dumps(buff)
+                if EncryptionModule.verify(msg_data, msg_signature, EncryptionModule.reformat_public_key(session["pk"])) == False:
+                    if self.DEBUG:    
+                        loginfo(f"{self.node_id}: signature not verified")
+                    return None
             return message
         else:
             #get session
-            session = self.sessions("get_connection_sessions",json.dumps([message.message["session_id"]]))
+            session = self.make_function_call(self.sessions,"get_connection_session",message["session_id"])
             if not session:
                 if self.DEBUG:
                     loginfo(f"{self.node_id}: Invalid session")
@@ -141,14 +144,14 @@ class NetworkInterface:
 
             #decrypt message
             try:
-                decrypted_msg = EncryptionModule.decrypt_symmetric(message.message["message"],session["key"])
-            except:
+                decrypted_msg = EncryptionModule.decrypt_symmetric(message["message"],session["key"])
+            except Exception as e:
                 if self.DEBUG:
-                    loginfo(f"{self.node_id}: Invalid key")
+                    loginfo(f"{self.node_id}: error in symmetric decryption : {e}")
                 return
             #validate message
             message["message"] = json.loads(decrypted_msg)       
-            return message.message
+            return message
     
     def __prepare_message(self,msg_type, message,signed=False,session_id=None):
         
@@ -203,6 +206,7 @@ class NetworkInterface:
                     #encrypt message data
                     prepared_message = EncryptionModule.encrypt_symmetric(msg_data,session["key"])
                     msg_payload["message"] = prepared_message
+                    msg_payload["session_id"] = session["session_id"]
                 else:
                     #check if there is discovery session
                     discovery_session = self.make_function_call(self.sessions,"get_discovery_session",node_id)

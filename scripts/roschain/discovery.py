@@ -68,31 +68,45 @@ class DiscoveryProtocol:
         if response == r"{}":
             return None
         return json.loads(response)
-
-    def handle(self,message):
+    
+    def except_active_session(self,node_id):
         #check if the node is already connected to the network
-        if self.make_function_call(self.sessions,"has_active_connection_session",message["node_id"]):
+        if self.make_function_call(self.sessions,"has_active_connection_session",node_id):
             if self.DEBUG:    
                 loginfo(f"{self.node_id}: connection session is already active")
             return None
+        return True
+    
+    def handle(self,message):
+        
         #first verify the me
         if message["type"] == "discovery_request":
+            if not self.except_active_session(message["node_id"]):
+                return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting response_to_discovery")
             self.respond_to_discovery(message)
         elif message["type"] == "discovery_response":
+            if not self.except_active_session(message["node_id"]):
+                return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting verify_discovery")
             self.verify_discovery(message)
         elif message["type"] == "discovery_verification":
+            if not self.except_active_session(message["node_id"]):
+                return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting verify_discovery_response")
             self.verify_discovery_response(message)
         elif message["type"] == "discovery_verification_response":
+            if not self.except_active_session(message["node_id"]):
+                return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting approve_discovery")
             self.approve_discovery(message)
         elif message["type"] == "discovery_approval":
+            if not self.except_active_session(message["node_id"]):
+                return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting approve_discovery_response")
             self.approve_discovery_response(message)
@@ -380,11 +394,12 @@ class DiscoveryProtocol:
         #delay for 1 second
         sleep(1)
         self.make_function_call(self.sessions,"create_connection_session",session_id,session_data)
+        loginfo(f"{self.node_id}: Discovery completed successfully with {message.message['node_id']}")
 
     def finalize_discovery(self,message):
         #approve discovery response and add node to the network
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
+        session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",message["node_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
@@ -416,6 +431,7 @@ class DiscoveryProtocol:
             "status": "active",
         }
         self.make_function_call(self.sessions,"update_connection_session",session_id,session_data)
+        loginfo(f"{self.node_id}: Discovery completed successfully with {message.message['node_id']}")
         
 if __name__ == '__main__':
     ns = get_namespace()

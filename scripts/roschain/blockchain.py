@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import json
 import datetime
-from rospy import spin,loginfo,init_node,ServiceProxy,Publisher,Service,get_namespace,get_param,ROSInterruptException,Subscriber
+from rospy import spin,loginfo,init_node,ServiceProxy,Publisher,Service,get_namespace,get_param,ROSInterruptException,Subscriber,is_shutdown,Rate
 from collections import OrderedDict
 from time import mktime
 from database import Database
@@ -270,7 +270,7 @@ class Blockchain:
         #init network publisher
         self.prepare_message = Publisher(f"/{self.node_id}/network/prepare_message",String,queue_size=10)
         #init sync handler subscriper
-        self.subscriber = Subscriber(f"/{self.node_id}/blockchain/sync_handler",String,self.handle_sync)
+        self.subscriber = Subscriber(f"/{self.node_id}/blockchain/blockchain_handler",String,self.handle_blockchain)
         #init sessions
         loginfo(f"{self.node_id}: Blockchain:Initializing database proxy")
         self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call",FunctionCall,True)
@@ -671,8 +671,10 @@ class Blockchain:
 
         return blockchain
     
-    def handle_sync(self,msg):
+    def handle_blockchain(self,msg):
         msg = json.loads(msg.data)
+        if msg["type"] == "blockchain_data":
+            self.queue.put(msg["data"],msg["format"])
         if msg["type"] == "sync_request":
             self.handle_sync_request(msg["message"])
         elif msg["type"] == "sync_reply":
@@ -797,4 +799,17 @@ if __name__ == "__main__":
     
     
     node = Blockchain(node_id,node_type,secret,DEBUG=True)
-    spin()
+    #define rate 
+    rate = Rate(10)
+    
+    #check queue 
+    while not is_shutdown():
+        #check if there is any message in the queue
+        if node.queue.is_empty():
+            continue
+        #get the message
+        msg = node.queue.pop()
+        print(msg)
+        rate.sleep()
+        
+        

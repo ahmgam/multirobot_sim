@@ -86,7 +86,7 @@ class SessionManager:
                 return True
         return False
     
-    def get_connection_sessions(self,session_id):
+    def get_connection_session(self,session_id):
         #get connection sessions
         session= self.connection_sessions.get(session_id,None)
         if session:
