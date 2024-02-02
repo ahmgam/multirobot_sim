@@ -249,7 +249,7 @@ class Database (object):
 
 class Blockchain:
     #initialize the blockchain
-    def __init__(self,node_id,node_type,secret,DEBUG=False):
+    def __init__(self,node_id,node_type,secret,block_size=10, tolerance=5,DEBUG=False):
         
         #node id
         self.node_id = node_id
@@ -257,6 +257,10 @@ class Blockchain:
         self.node_type = node_type
         #debug mode
         self.DEBUG = DEBUG
+        #block size
+        self.block_size = block_size
+        #tolerance
+        self.tolerance = tolerance
         #secret of the blockchain
         self.secret = secret
         loginfo(f"{node_id}: Blockchain: Initializing")
@@ -286,6 +290,14 @@ class Blockchain:
         #queue 
         self.queue = OrderedQueue()
         loginfo(f"{self.node_id}: Blockchain:Initialized successfully")
+        self.last_tx = self.get_last_committed_block()
+        
+    def get_last_committed_block(self):
+        #get the last block 
+        last_block = self.db.select("block",["*"],("id",'==',self.db.get_last_id("block")))
+        if not last_block:
+            return 0
+        return last_block[0]["tx_end_id"]
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -356,6 +368,15 @@ class Blockchain:
         prev_hash = self.__get_previous_hash()
         #combine the hashes
         combined_hash = self.__get_combined_hash(prev_hash,prev_hash)
+        #check of the block exists
+        block_exists = self.db.select("block", ["id", "combined_hash"], ("id", "==", 1))
+        if block_exists:
+            print(block_exists)
+            print(combined_hash)
+            if block_exists[0]["combined_hash"] == combined_hash:
+                return
+            else:
+                raise Exception("Genesis block is not valid")
         #add the transaction to the blockchain
         self.db.insert("block",("tx_start_id",0),("tx_end_id",0),("merkle_root",prev_hash),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
@@ -434,7 +455,7 @@ class Blockchain:
         self.db.insert(table,*[(key,value) for key,value in data.items()])
         #get the inserted record
         item = self.db.select(table,["*"],*[(key,'==',value) for key,value in data.items()])[0]
-        item_id = item["id"]
+        item_id = item.pop("id")
         #remove the hash from the record
         last_transaction_id = self.db.get_last_id("transactions")
         current_hash = self.__get_current_hash(item)
@@ -445,20 +466,19 @@ class Blockchain:
         #self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
         return item_id
 
-    def add_block(self,transactions):
-        ids = []
-        for transaction in transactions:
-        
-            id =self.add_transaction(transaction["message"]["table_name"],json.loads(transaction["message"]["data"]),transaction["message"]["time"])
-            ids.append(id)
-        #sord ids list
-        ids.sort()
-        #get all meta data of transactions
-        transactions_meta= []
-        for id in ids:
-            transaction_meta = self.get_metadata(id)
-            transactions_meta.append(transaction_meta)
+    def add_block(self,start_tx, end_tx):
+        #get all transactions between start and end id
+        transactions_meta= self.db.select("transactions",["*"],("id",">=",start_tx),("id","<=",end_tx+self.tolerance))
+        #pop out the id from the transactions
+        for transaction in transactions_meta:
+            transaction.pop("id")
+        #sort the transactions by timecreated
+        transactions_meta.sort(key=lambda x: x['timecreated'])
+        #get block size transactions
+        transactions_meta = transactions_meta[:self.block_size]
+        #get the merkle root
         root = self.__get_merkle_root(transactions_meta)
+        loginfo(f"{self.node_id}: Blockchain: Adding block with merkle root {root}")
         #get last id of block
         last_block_id = self.db.get_last_id("block")
         #get previous hash
@@ -466,8 +486,14 @@ class Blockchain:
         #combine the hashes
         combined_hash = self.__get_combined_hash(root,prev_hash)
         #add the transaction to the blockchain
-        self.db.insert("block",("tx_start_id",min(ids)),("tx_end_id",max(ids)),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        self.db.insert("block",("tx_start_id",start_tx),("tx_end_id",end_tx),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
+    def add_entry(self,msg):
+        id = node.add_transaction(msg["message"]["table_name"],json.loads(msg["message"]["data"]),msg["message"]["time"])
+        if node.last_tx + node.block_size + node.tolerance <= id :
+            node.add_block(node.last_tx+1,id-node.tolerance)
+            node.last_tx = id
+        
     def get_transaction(self,transaction_id):
         transaction_data = self.get_metadata(transaction_id)
         if not transaction_data[0]:
@@ -680,7 +706,7 @@ class Blockchain:
         elif msg["type"] == "sync_reply":
             self.handle_sync_reply(msg["message"])
         else:
-            loginfo(f"{self.node_id}: Unknown message type")
+            loginfo(f"{self.node_id}: Unknown message type {msg['type']}")
     def send_sync_request(self):
         #get the sync info
         last_record,number_of_records = self.get_sync_info()
@@ -809,7 +835,7 @@ if __name__ == "__main__":
             continue
         #get the message
         msg = node.queue.pop()
-        print(msg)
+        node.add_entry(msg)
         rate.sleep()
         
         
