@@ -834,8 +834,10 @@ if __name__ == "__main__":
         if node.queue.is_empty():
             continue
         #get the message
-        msg = node.queue.pop()
-        node.add_entry(msg)
+        if node.queue.count() >= node.block_size + node.tolerance:
+            for i in range(node.block_size):
+                msg = node.queue.pop()
+                node.add_transaction(msg["message"]["table_name"],json.loads(msg["message"]["data"]),msg["message"]["time"])
         rate.sleep()
         
         
