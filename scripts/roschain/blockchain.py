@@ -476,7 +476,7 @@ class Blockchain:
         for _ in range(self.block_size):
             transaction = self.buffer.pop()
             print(transaction)
-            tx_meta = self.add_transaction(transaction["message"]["table_name"],transaction["message"]["data"],transaction["message"]["time"])
+            tx_meta = self.add_transaction(transaction["message"]["table_name"],transaction["message"]["item"],transaction["message"]["time"])
             transactions_meta.append(tx_meta)       
         #get the merkle root
         root = self.__get_merkle_root(transactions_meta)
@@ -501,7 +501,8 @@ class Blockchain:
         return item
         
     def add_entry(self,msg):
-        item = node.add_record(msg["table_name"],json.loads(msg["data"]))
+        msg["data"]=json.loads(msg["data"])
+        item = node.add_record(msg["table_name"],msg["data"])
         msg["item"] = item
         self.buffer.put(msg,msg["time"])
         if self.buffer.count() > self.block_size+ self.tolerance:
