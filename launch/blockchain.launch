@@ -48,6 +48,7 @@
         <node pkg="multirobot_sim" type="blockchain.py" name="blockchain" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="base_dir" value="$(arg base_directory)"/>
             <param name="secret" value="$(arg secret)"/>
         </node>  
         <node pkg="multirobot_sim" type="session.py" name="session" output="screen" required="true">

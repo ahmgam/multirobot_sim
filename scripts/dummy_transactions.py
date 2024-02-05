@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from multirobot_sim.srv import SubmitTransaction,SubmitTransactionRequest
+from std_srvs.srv import Trigger
 from rospy import ServiceProxy
 import json
 from rospy import ServiceProxy
@@ -17,6 +18,11 @@ class DummyTransactions:
         self.pos_y = None
         self.last_state_update = datetime.now()
         rospy.loginfo(f"{self.node_id}: dummy_transactions: Initializing get_records service client")
+        self.is_ready = ServiceProxy(f'/{self.node_id}/roschain/is_ready',Trigger)
+        self.is_ready.wait_for_service(timeout=25)
+        while not self.is_ready().success:
+            rospy.loginfo(f"{self.node_id}: dummy_transactions: Waiting for roschain to be ready")
+            rospy.sleep(5)
         self.submit_message = ServiceProxy(f'/{self.node_id}/roschain/submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
     

@@ -9,6 +9,7 @@ from encryption import EncryptionModule
 from multirobot_sim.srv import  DatabaseQuery, DatabaseQueryRequest,FunctionCall,FunctionCallResponse
 from std_msgs.msg import String
 from queues import OrderedQueue
+from queue import Queue
 
 ####################################
 # Database module
@@ -249,7 +250,7 @@ class Database (object):
 
 class Blockchain:
     #initialize the blockchain
-    def __init__(self,node_id,node_type,secret,block_size=10, tolerance=5,DEBUG=False):
+    def __init__(self,node_id,node_type,secret,base_dir,block_size=10, tolerance=5,DEBUG=False):
         
         #node id
         self.node_id = node_id
@@ -263,6 +264,8 @@ class Blockchain:
         self.tolerance = tolerance
         #secret of the blockchain
         self.secret = secret
+        #base directory
+        self.base_dir = base_dir
         loginfo(f"{node_id}: Blockchain: Initializing")
         node = init_node("blochchain",anonymous=True)
         #define blockchain service
@@ -288,7 +291,10 @@ class Blockchain:
         #sync views
         self.views = OrderedDict()
         #queue 
-        self.queue = OrderedQueue()
+        self.queue = Queue()
+        #buffer 
+        self.buffer = OrderedQueue(self.base_dir)
+        self.buffer.load()
         loginfo(f"{self.node_id}: Blockchain:Initialized successfully")
         self.last_tx = self.get_last_committed_block()
         
@@ -449,33 +455,28 @@ class Blockchain:
                 )
 
     #commit a new transaction to the blockchain
-    def add_transaction(self,table,data,time =mktime(datetime.datetime.now().timetuple())):
+    def add_transaction(self,table,item,time =mktime(datetime.datetime.now().timetuple())):
         
         #add the record to it's table
-        self.db.insert(table,*[(key,value) for key,value in data.items()])
-        #get the inserted record
-        item = self.db.select(table,["*"],*[(key,'==',value) for key,value in data.items()])[0]
         item_id = item.pop("id")
         #remove the hash from the record
-        last_transaction_id = self.db.get_last_id("transactions")
         current_hash = self.__get_current_hash(item)
         #add the transaction to the blockchain
         time_created = datetime.datetime.fromtimestamp(time).strftime("%Y-%m-%d %H:%M:%S") if type(time) == float else time
         self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",time_created))
+        tx_item = self.db.select("transactions",["*"],("item_id",'==',item_id),("item_table",'==',table))[0]
         #sending log info 
         #self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
-        return item_id
+        return tx_item
 
-    def add_block(self,start_tx, end_tx):
+    def add_block(self):
         #get all transactions between start and end id
-        transactions_meta= self.db.select("transactions",["*"],("id",">=",start_tx),("id","<=",end_tx+self.tolerance))
+        transactions_meta= []
         #pop out the id from the transactions
-        for transaction in transactions_meta:
-            transaction.pop("id")
-        #sort the transactions by timecreated
-        transactions_meta.sort(key=lambda x: x['timecreated'])
-        #get block size transactions
-        transactions_meta = transactions_meta[:self.block_size]
+        for _ in range(self.block_size):
+            transaction = self.buffer.pop()
+            tx_meta = self.add_transaction(transaction["table_name"],transaction["data"],transaction["time"])
+            transactions_meta.append(tx_meta)       
         #get the merkle root
         root = self.__get_merkle_root(transactions_meta)
         loginfo(f"{self.node_id}: Blockchain: Adding block with merkle root {root}")
@@ -488,11 +489,19 @@ class Blockchain:
         #add the transaction to the blockchain
         self.db.insert("block",("tx_start_id",start_tx),("tx_end_id",end_tx),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
+    def add_record(self,table,data):
+        #add the record to it's table
+        self.db.insert(table,*[(key,value) for key,value in data.items()])
+        #get the inserted record
+        item = self.db.select(table,["*"],*[(key,'==',value) for key,value in data.items()])[0]
+        return item
+        
     def add_entry(self,msg):
-        id = node.add_transaction(msg["message"]["table_name"],json.loads(msg["message"]["data"]),msg["message"]["time"])
-        if node.last_tx + node.block_size + node.tolerance <= id :
-            node.add_block(node.last_tx+1,id-node.tolerance)
-            node.last_tx = id
+        item = node.add_entry(msg["message"]["table_name"],json.loads(msg["message"]["data"]))
+        msg["message"]["item"] = item
+        self.buffer.put(msg["message"],msg["time"])
+        if self.buffer.count() > self.block_size+ self.tolerance:
+            node.add_block()
         
     def get_transaction(self,transaction_id):
         transaction_data = self.get_metadata(transaction_id)
@@ -700,7 +709,7 @@ class Blockchain:
     def handle_blockchain(self,msg):
         msg = json.loads(msg.data)
         if msg["type"] == "blockchain_data":
-            self.queue.put(msg["data"],msg["format"])
+            self.queue.put(msg["data"])
         if msg["type"] == "sync_request":
             self.handle_sync_request(msg["message"])
         elif msg["type"] == "sync_reply":
@@ -823,21 +832,24 @@ if __name__ == "__main__":
     except KeyError:
         raise ROSInterruptException("Invalid arguments : secret")
     
+    try:
+        base_dir = get_param(f'{ns}blockchain/base_dir') # node_name/argsname
+        loginfo(f"Blockchain: Getting base_dir argument, and got : {base_dir}")
+    except KeyError:
+        raise ROSInterruptException("Invalid arguments : base_dir")
     
-    node = Blockchain(node_id,node_type,secret,DEBUG=True)
+    
+    node = Blockchain(node_id,node_type,secret,base_dir,DEBUG=True)
     #define rate 
     rate = Rate(10)
     
     #check queue 
     while not is_shutdown():
         #check if there is any message in the queue
-        if node.queue.is_empty():
+        if node.queue.empty():
             continue
         #get the message
-        if node.queue.count() >= node.block_size + node.tolerance:
-            for i in range(node.block_size):
-                msg = node.queue.pop()
-                node.add_transaction(msg["message"]["table_name"],json.loads(msg["message"]["data"]),msg["message"]["time"])
+        node.add_entry(node.queue.get())
         rate.sleep()
         
         

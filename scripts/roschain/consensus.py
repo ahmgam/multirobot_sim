@@ -194,10 +194,10 @@ class SBFT:
                 loginfo(f"{self.node_id}: signature not verified")
             return None
         #compare node state table
-        if not self.make_function_call(self.sessions,"compare_node_state_table",msg['node_ids']):
-            if self.DEBUG:
-                loginfo(f"{self.node_id}: Node state table not equal")
-            return None
+        #if not self.make_function_call(self.sessions,"compare_node_state_table",msg['node_ids']):
+        #    if self.DEBUG:
+        #        loginfo(f"{self.node_id}: Node state table not equal")
+        #    return None
         #message payload
         payload = {
             "timestamp":mktime(datetime.datetime.now().timetuple()),

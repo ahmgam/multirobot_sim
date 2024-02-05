@@ -4,6 +4,7 @@ import datetime
 from rospy import init_node,get_param,loginfo,get_namespace,spin,ROSInterruptException,Service,ServiceProxy
 from time import mktime
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse,FunctionCall
+from std_srvs.srv import Trigger,TriggerResponse
 
 #from multirobot_sim.srv import GetBCRecords,SubmitTransaction
 #####################################
@@ -25,6 +26,10 @@ class RosChain:
         self.node_type = node_type
         #define ros node
         self.node = init_node("roschain", anonymous=True)
+        #define eady flag
+        self.ready = False
+        #initialize ready service
+        self.is_ready_service = Service(f"/{self.node_id}/roschain/is_ready",Trigger,lambda req: TriggerResponse(self.ready,str(self.ready)))
         #define records service
         loginfo(f"{self.node_id}: ROSChain:Initializing records service")
         self.get_record_service = Service(f"/{self.node_id}/roschain/get_records",GetBCRecords,lambda req: self.get_records(req))
@@ -40,6 +45,7 @@ class RosChain:
         self.consensus = ServiceProxy(f"/{self.node_id}/consensus/call", FunctionCall)
         self.consensus.wait_for_service()
         loginfo(f"{self.node_id}: RSOChain:Initialized successfully")
+        self.ready = True
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -59,7 +65,8 @@ class RosChain:
         message = {
             "table_name":table_name,
             "data":data,
-            "time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
+            "time":msg_time
+            #"time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
         }
         #payload 
         payload ={

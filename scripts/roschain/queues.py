@@ -7,20 +7,20 @@ import datetime
 
 class OrderedQueue:
     
-    def __init__(self):
+    def __init__(self,base_dir="/"):
+        self.base_dir = base_dir
         self.queue = []
 
-    def put(self, message,msg_type):
+    def put(self, message,msg_time):
         
         #add message to queue
         self.queue.append({
             "message": message,
-            "time": mktime(datetime.datetime.now().timetuple()) if message.get("time",None) is None else message["time"],
-            "type": msg_type
+            "time": msg_time
         })
      
         try:
-            self.queue.sort(key=lambda x: x['time'])
+            self.queue=sorted(self.queue,key=lambda x: x['time'])
         except KeyError as e:
             print(self.queue)
             exit()
@@ -39,4 +39,17 @@ class OrderedQueue:
     
     def count(self):
         return len(self.queue)
+    
+    def save(self):
+        import json
+        with open(self.base_dir+"/buffer.json", 'w') as f:
+            json.dump(self.queue, f)
+    
+    def load(self):
+        import json
+        try:
+            with open(self.base_dir+"/buffer.json", 'r') as f:
+                self.queue = json.load(f)
+        except:
+            self.queue = []
     
