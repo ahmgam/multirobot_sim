@@ -475,7 +475,8 @@ class Blockchain:
         #pop out the id from the transactions
         for _ in range(self.block_size):
             transaction = self.buffer.pop()
-            tx_meta = self.add_transaction(transaction["table_name"],transaction["data"],transaction["time"])
+            print(transaction)
+            tx_meta = self.add_transaction(transaction["message"]["table_name"],transaction["message"]["data"],transaction["message"]["time"])
             transactions_meta.append(tx_meta)       
         #get the merkle root
         root = self.__get_merkle_root(transactions_meta)
@@ -486,6 +487,9 @@ class Blockchain:
         prev_hash = self.__get_previous_hash(last_block_id)
         #combine the hashes
         combined_hash = self.__get_combined_hash(root,prev_hash)
+        #
+        start_tx = transactions_meta[0]["id"]
+        end_tx = transactions_meta[-1]["id"]
         #add the transaction to the blockchain
         self.db.insert("block",("tx_start_id",start_tx),("tx_end_id",end_tx),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
@@ -497,9 +501,9 @@ class Blockchain:
         return item
         
     def add_entry(self,msg):
-        item = node.add_entry(msg["message"]["table_name"],json.loads(msg["message"]["data"]))
-        msg["message"]["item"] = item
-        self.buffer.put(msg["message"],msg["time"])
+        item = node.add_record(msg["table_name"],json.loads(msg["data"]))
+        msg["item"] = item
+        self.buffer.put(msg,msg["time"])
         if self.buffer.count() > self.block_size+ self.tolerance:
             node.add_block()
         
