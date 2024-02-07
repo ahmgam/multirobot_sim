@@ -167,6 +167,7 @@ if __name__ == '__main__':
     rate = Rate(10)
     while not is_shutdown():
         #check queue
+        node.cron()
         if not node.queue.empty():
             msg = node.queue.get()
             node.handle(msg)

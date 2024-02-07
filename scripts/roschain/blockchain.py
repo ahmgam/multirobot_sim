@@ -475,8 +475,8 @@ class Blockchain:
         #pop out the id from the transactions
         for _ in range(self.block_size):
             transaction = self.buffer.pop()
-            print(transaction)
             tx_meta = self.add_transaction(transaction["message"]["table_name"],transaction["message"]["item"],transaction["message"]["time"])
+            tx_meta.pop("id")
             transactions_meta.append(tx_meta)       
         #get the merkle root
         root = self.__get_merkle_root(transactions_meta)
