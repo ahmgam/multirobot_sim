@@ -377,8 +377,6 @@ class Blockchain:
         #check of the block exists
         block_exists = self.db.select("block", ["id", "combined_hash"], ("id", "==", 1))
         if block_exists:
-            print(block_exists)
-            print(combined_hash)
             if block_exists[0]["combined_hash"] == combined_hash:
                 return
             else:
@@ -476,8 +474,13 @@ class Blockchain:
         for _ in range(self.block_size):
             transaction = self.buffer.pop()
             tx_meta = self.add_transaction(transaction["message"]["table_name"],transaction["message"]["item"],transaction["message"]["time"])
-            tx_meta.pop("id")
-            transactions_meta.append(tx_meta)       
+            transactions_meta.append(tx_meta)    
+        #get the start and end id
+        start_tx = transactions_meta[0]["id"]
+        end_tx = transactions_meta[-1]["id"]
+        #remove id from the transaction
+        for i in range(len(transactions_meta)):
+            transactions_meta[i].pop("id")
         #get the merkle root
         root = self.__get_merkle_root(transactions_meta)
         loginfo(f"{self.node_id}: Blockchain: Adding block with merkle root {root}")
@@ -488,8 +491,8 @@ class Blockchain:
         #combine the hashes
         combined_hash = self.__get_combined_hash(root,prev_hash)
         #
-        start_tx = transactions_meta[0]["id"]
-        end_tx = transactions_meta[-1]["id"]
+        
+        
         #add the transaction to the blockchain
         self.db.insert("block",("tx_start_id",start_tx),("tx_end_id",end_tx),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     

@@ -56,46 +56,47 @@ class HeartbeatProtocol:
     
     def cron(self):
         #send heartbeat to all nodes
-        for session_id, session in self.make_function_call(self.sessions,"get_connection_sessions").items():
-            #check if time interval is passed
-            session_time = mktime(datetime.datetime.now().timetuple()) - session["last_heartbeat"]
-            if session_time > self.heartbeat_interval and session["status"] == "active":
-                #send heartbeat
-                self.send_heartbeat(session)
-                #update last heartbeat time
-                session["last_heartbeat"] = mktime(datetime.datetime.now().timetuple())
-                self.make_function_call(self.sessions,"update_connection_session",session_id,session)
+        sessions = self.make_function_call(self.sessions,"get_connection_sessions")
+        if sessions:
+            for session_id, session in sessions.items():
+                #check if time interval is passed
+                session_time = mktime(datetime.datetime.now().timetuple()) - session["last_heartbeat"]
+                if session_time > self.heartbeat_interval and session["status"] == "active":
+                    #send heartbeat
+                    self.send_heartbeat(session)
+                    #update last heartbeat time
+                    session["last_heartbeat"] = mktime(datetime.datetime.now().timetuple())
+                    self.make_function_call(self.sessions,"update_connection_session",session_id,session)
     def handle(self,message):
         
         if message["type"] == "heartbeat_request":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting handle_heartbeat")
+                loginfo(f"{self.node_id}: HeartbeatProtocol: Received message from {message['node_id']} of type {message['type']}, starting handle_heartbeat")
             self.handle_heartbeat(message)
         elif message["type"] == "heartbeat_response":
             if self.DEBUG:
-                loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting handle_heartbeat_response")
+                loginfo(f"{self.node_id}: HeartbeatProtocol: Received message from {message['node_id']} of type {message['type']}, starting handle_heartbeat_response")
             self.handle_heartbeat_response(message)
         else:
             if self.DEBUG:
-                loginfo(f"{self.node_id}: unknown message type {message['type']}")
+                loginfo(f"{self.node_id}: HeartbeatProtocol: unknown message type {message['type']}")
                 
     def send_heartbeat(self,session):
         
         #send heartbeat to session
         #prepare message 
         msg_data = OrderedDict({
-                "timestamp": str(datetime.datetime.now()),
-                "data":self.make_function_call(self.sessions,"get_node_state_table"),
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
         #call network service
+        loginfo(f"{self.node_id}: HeartbeatProtocol: Sending heartbeat to {session['node_id']}")
         self.prepare_message.publish(json.dumps({"message":msg_data,"type":"heartbeat_request","target":session["node_id"]}))
         
            
     def handle_heartbeat(self,message):
         #receive heartbeat from node
         #get session
-        session = self.make_function_call(self.sessions,"get_connection_sessions",*message["session_id"])
+        session = self.make_function_call(self.sessions,"get_connection_session",message["session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid session")
@@ -107,16 +108,15 @@ class HeartbeatProtocol:
         #    return
         #update node state table
         #self.parent.server.logger.warning(f'table request : {json.dumps(message["message"]["data"])}' )
-        self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
+        #self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
         #chcek blockchain status
-        if self.make_function_call(self.blockchain,"check_sync",*message["message"]["blockchain_status"]) == False:
+        if self.make_function_call(self.blockchain,"check_sync",*message["message"]["data"]["blockchain_status"]) == False:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Un synced blockchain, sending sync request")
             self.make_function_call(self.blockchain,"send_sync_request")
             
         #prepare message 
         msg_data = OrderedDict({
-                "timestamp": str(datetime.datetime.now()),
                 "data":self.make_function_call(self.sessions,"get_node_state_table"),
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
@@ -138,12 +138,12 @@ class HeartbeatProtocol:
         #        loginfo(f"{self.node_id}: Invalid counter")
         #    return
         #update node state table
-        self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
+        #self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
         #update session
         self.make_function_call(self.sessions,"update_connection_session",message["session_id"],{
             "last_active": mktime(datetime.datetime.now().timetuple())})
         #chcek blockchain status
-        if self.make_function_call(self.blockchain,"check_sync",*message["message"]["blockchain_status"])== False:
+        if self.make_function_call(self.blockchain,"check_sync",message["message"]["data"]["blockchain_status"])== False:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Un synced blockchain, sending sync request")
             self.make_function_call(self.blockchain,"send_sync_request")    
