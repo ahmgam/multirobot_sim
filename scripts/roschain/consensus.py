@@ -441,6 +441,8 @@ class SBFT:
             print(f"{self.node_id}: ERROR : {e}")
         #broadcast message
         self.prepare_message.publish(json.dumps({"message":payload,"type":"data_exchange","target":"all_active"}))
+        #remove view
+        self.views.pop(view_id)
     
     def commit_collect(self,msg):
         #handle commit-collect message
@@ -500,6 +502,8 @@ class SBFT:
             "format":"dict",
             "time":view["timestamp"]
             }))
+        #remove view
+        self.views.pop(view_id)
     
     #TODO implement view change
     def generate_view_id(self,length=8):

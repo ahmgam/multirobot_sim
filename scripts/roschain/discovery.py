@@ -15,7 +15,7 @@ from queue import Queue
 ########################################
 
 class DiscoveryProtocol:
-    def __init__(self,node_id,node_type,secret,DEBUG=True):
+    def __init__(self,node_id,node_type,secret,max_delay,DEBUG=True):
         #define node id
         self.node_id = node_id
         #define node type
@@ -29,7 +29,7 @@ class DiscoveryProtocol:
         #define discovery interval
         self.discovery_interval = 10
         #define discovery last call
-        self.last_call = mktime(datetime.datetime.now().timetuple()) + randint(1,10)
+        self.last_call = mktime(datetime.datetime.now().timetuple()) + randint(1,max_delay)
         #publisher
         loginfo(f"{self.node_id}: Discovery:Initializing publisher and subscriber")
         self.publisher = Publisher(f"/{self.node_id}/network/prepare_message", String, queue_size=10)
@@ -454,7 +454,13 @@ if __name__ == '__main__':
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : secret")
     
-    node = DiscoveryProtocol(node_id,node_type,secret,DEBUG=True)
+    try:
+        max_delay = get_param(f'{ns}discovery/max_delay',10)
+        loginfo(f"discovery: Getting max_delay argument, and got : {max_delay}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : max_delay")
+    
+    node = DiscoveryProtocol(node_id,node_type,secret,max_delay,DEBUG=True)
     #define rate
     rate = Rate(10)
     while not is_shutdown():

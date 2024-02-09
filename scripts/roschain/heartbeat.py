@@ -8,9 +8,10 @@ from time import mktime
 from rospy import loginfo,ServiceProxy,init_node,Publisher,get_namespace,spin,get_param,is_shutdown,Rate,ROSInterruptException,Subscriber
 from std_msgs.msg import String
 from multirobot_sim.srv import FunctionCall
+from random import randint
 class HeartbeatProtocol:
     
-    def __init__(self,node_id,node_type,DEBUG=True):
+    def __init__(self,node_id,node_type,max_delay,DEBUG=True):
         self.node_id = node_id
         self.node_type = node_type
         self.DEBUG = DEBUG
@@ -36,7 +37,7 @@ class HeartbeatProtocol:
         self.key_store = ServiceProxy(f"/{self.node_id}/key_store/call", FunctionCall)
         self.key_store.wait_for_service()
         #define last heartbeat
-        self.last_call = mktime(datetime.datetime.now().timetuple())
+        self.last_call = mktime(datetime.datetime.now().timetuple())+ randint(1,max_delay)
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk,self.sk =EncryptionModule.reconstruct_keys(keys["pk"],keys["sk"])
@@ -163,7 +164,13 @@ if __name__ == '__main__':
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_type")
     
-    node = HeartbeatProtocol(node_id,node_type,DEBUG=True)
+    try:
+        max_delay = get_param(f'{ns}discovery/max_delay',10)
+        loginfo(f"discovery: Getting max_delay argument, and got : {max_delay}")
+    except ROSInterruptException:
+        raise ROSInterruptException("Invalid arguments : max_delay")
+    
+    node = HeartbeatProtocol(node_id,node_type,max_delay,DEBUG=True)
     rate = Rate(10)
     while not is_shutdown():
         #check queue

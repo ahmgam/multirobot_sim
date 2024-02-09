@@ -747,7 +747,7 @@ class Blockchain:
             "source":self.node_id
         }
         #send the sync request to other nodes
-        self.prepare_message.publish(json.dumps({"message":msg,"target":"all","type":"sync_request"}))
+        self.prepare_message.publish(json.dumps({"message":msg,"target":"all_active","type":"sync_request"}))
 
     #handle sync request from other nodes
     def handle_sync_request(self,msg):

@@ -8,6 +8,7 @@
     <arg name="port" default="1883"/>
     <arg name="base_directory" default="$(find multirobot_sim)/scripts"/>
     <arg name="secret" default="abc123"/>
+    <arg name="max_delay" default="10.0"/>
     <arg name="schema"/>
 
   <!--Robot namespace-->
@@ -29,10 +30,12 @@
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
             <param name="secret" value="$(arg secret)"/>
+            <param name="max_delay" value="$(arg max_delay)"/>
         </node>   
         <node pkg="multirobot_sim" type="heartbeat.py" name="heartbeat" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="max_delay" value="$(arg max_delay)"/>
         </node>   
         <node pkg="multirobot_sim" type="key_store.py" name="key_store" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
