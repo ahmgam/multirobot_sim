@@ -504,10 +504,12 @@ class Blockchain:
         return item
         
     def add_entry(self,msg):
+        source = msg["source"]
+        msg = msg["data"]
         msg["data"]=json.loads(msg["data"])
         item = node.add_record(msg["table_name"],msg["data"])
         msg["item"] = item
-        self.buffer.put(msg,msg["time"])
+        self.buffer.put(msg,msg["time"],source)
         if self.buffer.count() > self.block_size+ self.tolerance:
             node.add_block()
         
@@ -717,7 +719,7 @@ class Blockchain:
     def handle_blockchain(self,msg):
         msg = json.loads(msg.data)
         if msg["type"] == "blockchain_data":
-            self.queue.put(msg["data"])
+            self.queue.put(msg)
         if msg["type"] == "sync_request":
             self.handle_sync_request(msg["message"])
         elif msg["type"] == "sync_reply":

@@ -126,7 +126,7 @@ class HeartbeatProtocol:
     def handle_heartbeat_response(self,message):
         #receive heartbeat from node
         #get session
-        session = self.make_function_call(self.sessions,"get_connection_sessions",message["session_id"])
+        session = self.make_function_call(self.sessions,"get_connection_session",message["session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Invalid session")
@@ -143,7 +143,7 @@ class HeartbeatProtocol:
         self.make_function_call(self.sessions,"update_connection_session",message["session_id"],{
             "last_active": mktime(datetime.datetime.now().timetuple())})
         #chcek blockchain status
-        if self.make_function_call(self.blockchain,"check_sync",message["message"]["data"]["blockchain_status"])== False:
+        if self.make_function_call(self.blockchain,"check_sync",*message["message"]["data"]["blockchain_status"])== False:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Un synced blockchain, sending sync request")
             self.make_function_call(self.blockchain,"send_sync_request")    

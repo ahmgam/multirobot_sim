@@ -11,16 +11,20 @@ class OrderedQueue:
         self.base_dir = base_dir
         self.queue = []
 
-    def put(self, message,msg_time):
+    def put(self, message,msg_time,alt_key=None):
         
         #add message to queue
         self.queue.append({
             "message": message,
-            "time": msg_time
+            "time": msg_time,
+            "alt_key": alt_key
         })
      
         try:
-            self.queue=sorted(self.queue,key=lambda x: x['time'])
+            if alt_key:
+                self.queue=sorted(self.queue,key=lambda x: (x['time'],x['alt_key']))
+            else:
+                self.queue=sorted(self.queue,key=lambda x: x['time'])
         except KeyError as e:
             print(self.queue)
             exit()
