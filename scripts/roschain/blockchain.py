@@ -473,7 +473,8 @@ class Blockchain:
         #pop out the id from the transactions
         for _ in range(self.block_size):
             transaction = self.buffer.pop()
-            tx_meta = self.add_transaction(transaction["message"]["table_name"],transaction["message"]["item"],transaction["message"]["time"])
+            item = node.add_record(transaction["message"]["table_name"],transaction["message"]["data"])
+            tx_meta = self.add_transaction(transaction["message"]["table_name"],item,transaction["message"]["time"])
             transactions_meta.append(tx_meta)    
         #get the start and end id
         start_tx = transactions_meta[0]["id"]
@@ -504,12 +505,10 @@ class Blockchain:
         return item
         
     def add_entry(self,msg):
-        source = msg["source"]
+        hash = msg["hash"]
         msg = msg["data"]
         msg["data"]=json.loads(msg["data"])
-        item = node.add_record(msg["table_name"],msg["data"])
-        msg["item"] = item
-        self.buffer.put(msg,msg["time"],source)
+        self.buffer.put(msg,msg["time"],hash)
         if self.buffer.count() > self.block_size+ self.tolerance:
             node.add_block()
         

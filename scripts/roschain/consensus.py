@@ -435,7 +435,8 @@ class SBFT:
                 "type":"blockchain_data",
                 "source":view["source"],
                 "format":"dict",
-                "time":view["timestamp"]
+                "time":view["timestamp"],
+                "hash":view["hash"]
                 }))
         except Exception as e:
             print(f"{self.node_id}: ERROR : {e}")
@@ -500,7 +501,8 @@ class SBFT:
             "type":"blockchain_data",
             "source":view["source"],
             "format":"dict",
-            "time":view["timestamp"]
+            "time":view["timestamp"],
+            "hash":view["hash"]
             }))
         #remove view
         self.views.pop(view_id)
