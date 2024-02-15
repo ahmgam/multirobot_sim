@@ -272,6 +272,7 @@ class SBFT:
         #add message to prepare
         self.views[view_id]["prepare"].append(msg)
         #check if the number of prepare is more than 
+        print(self.views[view_id])
         if len(self.views[view_id]["prepare"]) < ceil((2/3)*((len(view["node_ids"])-1)/3)):
             return None
         #send prepare-collect message to source node

@@ -87,7 +87,8 @@ class HeartbeatProtocol:
         #send heartbeat to session
         #prepare message 
         msg_data = OrderedDict({
-                "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
+                "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info"),
+                "state_table":self.make_function_call(self.sessions,"get_node_state_table")
             })
         #call network service
         loginfo(f"{self.node_id}: HeartbeatProtocol: Sending heartbeat to {session['node_id']}")
@@ -109,7 +110,7 @@ class HeartbeatProtocol:
         #    return
         #update node state table
         #self.parent.server.logger.warning(f'table request : {json.dumps(message["message"]["data"])}' )
-        #self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
+        self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"]["state_table"])
         #chcek blockchain status
         if self.make_function_call(self.blockchain,"check_sync",*message["message"]["data"]["blockchain_status"]) == False:
             if self.DEBUG:
@@ -118,7 +119,7 @@ class HeartbeatProtocol:
             
         #prepare message 
         msg_data = OrderedDict({
-                "data":self.make_function_call(self.sessions,"get_node_state_table"),
+                "state_table":self.make_function_call(self.sessions,"get_node_state_table"),
                 "blockchain_status":self.make_function_call(self.blockchain,"get_sync_info")
             })
         #call network service
@@ -139,7 +140,7 @@ class HeartbeatProtocol:
         #        loginfo(f"{self.node_id}: Invalid counter")
         #    return
         #update node state table
-        #self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"])
+        self.make_function_call(self.sessions,"update_node_state_table",message["message"]["data"]["state_table"])
         #update session
         self.make_function_call(self.sessions,"update_connection_session",message["session_id"],{
             "last_active": mktime(datetime.datetime.now().timetuple())})
