@@ -22,6 +22,7 @@ class MQTTCommunicationModule:
         rospy.loginfo(f"{self.node_id}: Connector:Initializing publisher and subscriber")
         self.publisher = rospy.Publisher(f"/{self.node_id}/network/handle_message", String, queue_size=10)
         self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback)
+        self.log_subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_log", String, self.send_log)
         rospy.loginfo(f"{self.node_id}: Connector:Initialized successfully")
 
     def __init_mqtt(self):
@@ -72,7 +73,7 @@ class MQTTCommunicationModule:
             return False
         
     def send_log(self,message):
-        self.client.publish(f"{self.log_topic}", f"{self.node_id}|{message}")
+        self.client.publish(f"{self.log_topic}", f"{self.node_id}|{message.data}")
 
     def get(self):
         #self.client.loop()

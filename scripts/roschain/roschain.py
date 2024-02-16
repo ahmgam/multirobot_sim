@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 import json
 import datetime
-from rospy import init_node,get_param,loginfo,get_namespace,spin,ROSInterruptException,Service,ServiceProxy
+from rospy import init_node,get_param,loginfo,get_namespace,spin,ROSInterruptException,Service,ServiceProxy,Publisher
 from time import mktime
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse,FunctionCall
 from std_srvs.srv import Trigger,TriggerResponse
+from std_msgs.msg import String
 
 #from multirobot_sim.srv import GetBCRecords,SubmitTransaction
 #####################################
@@ -45,6 +46,8 @@ class RosChain:
         self.consensus = ServiceProxy(f"/{self.node_id}/consensus/call", FunctionCall)
         self.consensus.wait_for_service()
         loginfo(f"{self.node_id}: RSOChain:Initialized successfully")
+        #define connector log publisher
+        self.log_publisher = Publisher(f"/{self.node_id}/connector/send_log", String, queue_size=10)
         self.ready = True
         
     def make_function_call(self,service,function_name,*args):
@@ -68,6 +71,8 @@ class RosChain:
             "time":msg_time
             #"time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
         }
+        log_msg = f"{msg_time},msg,{msg_time["time"]}"
+        self.log_publisher(log_msg)
         #payload 
         payload ={
             "message":message,

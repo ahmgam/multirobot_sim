@@ -278,6 +278,8 @@ class Blockchain:
         self.prepare_message = Publisher(f"/{self.node_id}/network/prepare_message",String,queue_size=10)
         #init sync handler subscriper
         self.subscriber = Subscriber(f"/{self.node_id}/blockchain/blockchain_handler",String,self.handle_blockchain)
+        #define connector log publisher
+        self.log_publisher = Publisher(f"/{self.node_id}/connector/send_log", String, queue_size=10)
         #init sessions
         loginfo(f"{self.node_id}: Blockchain:Initializing database proxy")
         self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call",FunctionCall,True)
@@ -297,6 +299,7 @@ class Blockchain:
         self.buffer.load()
         loginfo(f"{self.node_id}: Blockchain:Initialized successfully")
         self.last_tx = self.get_last_committed_block()
+        
         
     def get_last_committed_block(self):
         #get the last block 
@@ -463,8 +466,7 @@ class Blockchain:
         time_created = datetime.datetime.fromtimestamp(time).strftime("%Y-%m-%d %H:%M:%S") if type(time) == float else time
         self.db.insert("transactions",("item_id",item_id),("item_table",table),("hash",current_hash),("timecreated",time_created))
         tx_item = self.db.select("transactions",["*"],("item_id",'==',item_id),("item_table",'==',table))[0]
-        #sending log info 
-        #self.parent.comm.send_log(f"{table}({last_transaction_id+1})")
+        
         return tx_item
 
     def add_block(self):
@@ -492,7 +494,10 @@ class Blockchain:
         #combine the hashes
         combined_hash = self.__get_combined_hash(root,prev_hash)
         #
-        
+        #sending log info 
+        time_now = mktime(datetime.datetime.now().timetuple())
+        log_msg = f"{time_now},block,{time_now}"
+        self.log_publisher.publish(log_msg)
         
         #add the transaction to the blockchain
         self.db.insert("block",("tx_start_id",start_tx),("tx_end_id",end_tx),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
@@ -508,6 +513,8 @@ class Blockchain:
         hash = msg["hash"]
         msg = msg["data"]
         msg["data"]=json.loads(msg["data"])
+        log_msg = f"{mktime(datetime.datetime.now().timetuple())},transaction,{msg["time"]}"
+        self.log_publisher(log_msg)
         self.buffer.put(msg,msg["time"],hash)
         if self.buffer.count() > self.block_size+ self.tolerance:
             node.add_block()
