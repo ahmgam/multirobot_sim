@@ -72,7 +72,7 @@ class RosChain:
             #"time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
         }
         log_msg = f"{msg_time},msg,{msg_time}"
-        self.log_publisher(log_msg)
+        self.log_publisher.publish(log_msg)
         #payload 
         payload ={
             "message":message,

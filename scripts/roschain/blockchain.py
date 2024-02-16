@@ -514,7 +514,7 @@ class Blockchain:
         msg = msg["data"]
         msg["data"]=json.loads(msg["data"])
         log_msg = f"{mktime(datetime.datetime.now().timetuple())},transaction,{msg['time']}"
-        self.log_publisher(log_msg)
+        self.log_publisher.publish(log_msg)
         self.buffer.put(msg,msg["time"],hash)
         if self.buffer.count() > self.block_size+ self.tolerance:
             node.add_block()
