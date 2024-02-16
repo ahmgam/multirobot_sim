@@ -71,7 +71,7 @@ class RosChain:
             "time":msg_time
             #"time":datetime.datetime.fromtimestamp(msg_time).strftime("%Y-%m-%d %H:%M:%S") 
         }
-        log_msg = f"{msg_time},msg,{msg_time["time"]}"
+        log_msg = f"{msg_time},msg,{msg_time['time']}"
         self.log_publisher(log_msg)
         #payload 
         payload ={
