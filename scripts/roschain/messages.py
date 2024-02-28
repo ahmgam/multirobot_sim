@@ -174,6 +174,8 @@ Network peer data message format:
 import json
 from collections import OrderedDict
 from rospy import loginfo
+from multirobot_sim.msg import KeyValueArray
+from rosmsg import KeyValue
 #########################################
 # Messages 
 #########################################
@@ -259,3 +261,44 @@ class ApprovalResponseMessage(Message):
         required_fields = ["session_id","test_message"]
         super().__init__(data,required_fields=required_fields)
  
+ 
+def unflatten_json(flat_json, sep='.'):
+    unflattened_json = {}
+    for compound_key, value in flat_json.items():
+        keys = compound_key.split(sep)
+        current_level = unflattened_json
+        for key in keys[:-1]:  
+            if key not in current_level:
+                current_level[key] = {}
+            current_level = current_level[key]
+        current_level[keys[-1]] = value  
+    return unflattened_json
+
+def flatten_json(nested_json, parent_key='', sep='.'):
+    items = []
+    for key, value in nested_json.items():
+        new_key = f"{parent_key}{sep}{key}" if parent_key else key
+        if isinstance(value, dict):
+            items.extend(flatten_json(value, new_key, sep=sep).items())
+        else:
+            items.append((new_key, value))
+    return dict(items)
+
+
+def pack_key_value_array(src_dict):
+    key_value_array = KeyValueArray()
+    kv_list = []
+    for key, value in src_dict.items():
+        key_value = KeyValue()
+        key_value.key = key
+        key_value.value = value
+        kv_list.append(key_value)
+    key_value_array.items = kv_list
+    return key_value_array
+
+def unpack_key_value_array(key_value_array):
+    dst_dict = {}
+    for kv in key_value_array.items:
+        dst_dict[kv.key] = kv.value
+    return dst_dict
+        
