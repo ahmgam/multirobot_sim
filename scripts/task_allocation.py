@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal,GetBCRecordsRequest,SubmitTransactionRequest,AddGoalResponse
-from rospy import ServiceProxy,Service
+from rospy import ServiceProxy,Service,Publisher, loginfo, wait_for_message,init_node,get_namespace, get_param,ROSInterruptException, is_shutdown
 import json
 from actionlib import SimpleActionClient,GoalStatus
-from rospy import ServiceProxy
 from datetime import datetime
-import rospy
 import numpy as np
 from std_srvs.srv import Trigger
 from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal
@@ -26,24 +24,24 @@ class Planner:
         self.odom_topic= odom_topic
         odom = self.getOdomMsg()
         self.start = (odom.pose.pose.position.x,odom.pose.pose.position.y)
-        rospy.loginfo(f"map size is {len(self.map.data)}")
+        loginfo(f"map size is {len(self.map.data)}")
         self.grid = self.formatGrid(self.map)
-        rospy.loginfo(f"planner:Grid formatted, shape is {self.grid.shape}")
+        loginfo(f"planner:Grid formatted, shape is {self.grid.shape}")
         self.gridInfo = self.formatGridInfo(self.map.info)
-        rospy.loginfo(f"planner:Grid info formatted, info is {self.gridInfo}")
+        loginfo(f"planner:Grid info formatted, info is {self.gridInfo}")
         self.algorithm = self.defineAlgorithm(algorithm)
-        rospy.loginfo(f"planner:Algorithm defined, algorithm is {type(self.algorithm)}")
+        loginfo(f"planner:Algorithm defined, algorithm is {type(self.algorithm)}")
 
     def getTheMap(self,mapService='/static_map'):
         #wait for map service
-        rospy.loginfo("simple_controller:Waiting for map service")
+        loginfo("simple_controller:Waiting for map service")
         serv = ServiceProxy(mapService, GetMap)
         serv.wait_for_service()
         map = serv().map
         return map
     
     def getOdomMsg(self):
-        odom = rospy.wait_for_message(self.odom_topic, Odometry, timeout=5.0)
+        odom = wait_for_message(self.odom_topic, Odometry, timeout=5.0)
         return odom
     def defineAlgorithm(self,algorithm):
         if algorithm is None:
@@ -143,9 +141,9 @@ class Planner:
         else :
             
             self.algorithm.setStart(self.posToGrid(self.start))
-            rospy.loginfo(f"planner:Start set to {self.algorithm.start}")
+            loginfo(f"planner:Start set to {self.algorithm.start}")
             self.algorithm.setGoal(self.posToGrid(self.goal))
-            rospy.loginfo(f"planner:Goal set to {self.algorithm.goal}")
+            loginfo(f"planner:Goal set to {self.algorithm.goal}")
             if other_paths is None:
                 self.algorithm.setMap(self.map,self.gridInfo)
                 self.algorithm.plan()
@@ -159,15 +157,15 @@ class Planner:
 
     def setGoal(self, x, y,z):
         self.goal = (x, y,z)
-        rospy.loginfo(f"planner:Goal set to {self.goal}")
+        loginfo(f"planner:Goal set to {self.goal}")
 
 
 class TaskAllocationManager:
     def __init__(self,planningAlgorithm=None):
         self.node_id,self.node_type,self.odom_topic,self.update_interval = self.getParameters()
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing")
-        self.node = rospy.init_node('task_allocator', anonymous=True)
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing parameters")
+        loginfo(f"{self.node_id}: Task_allocator: Initializing")
+        self.node = init_node('task_allocator', anonymous=True)
+        loginfo(f"{self.node_id}: Task_allocator: Initializing parameters")
         self.robots = {}
         self.targets = {}
         self.tasks = {}
@@ -181,54 +179,54 @@ class TaskAllocationManager:
         self.last_id = 1
         self.get_blockchain_records = ServiceProxy(f'get_records',GetBCRecords)
         self.get_blockchain_records.wait_for_service(timeout=25)
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing get_status service client")
+        loginfo(f"{self.node_id}: Task_allocator: Initializing get_status service client")
         self.chain_status = ServiceProxy(f'get_status',Trigger)
         self.chain_status.wait_for_service(timeout=25)
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing get_records service client")
+        loginfo(f"{self.node_id}: Task_allocator: Initializing get_records service client")
         self.submit_message = ServiceProxy(f'submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing submit_message service client")
+        loginfo(f"{self.node_id}: Task_allocator: Initializing submit_message service client")
         self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing add_goal service")
+        loginfo(f"{self.node_id}: Task_allocator: Initializing add_goal service")
         self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationActionAction)
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing navigation action client")
+        loginfo(f"{self.node_id}: Task_allocator: Initializing navigation action client")
         self.planner = Planner(self.odom_topic,planningAlgorithm)
         self.last_state = datetime.now()
-        self.path_publisher = rospy.Publisher(f'/{self.node_id}/path',Path,queue_size=1)
-        rospy.loginfo(f"{self.node_id}: Task_allocator: Initializing path publisher")
+        self.path_publisher = Publisher(f'/{self.node_id}/path',Path,queue_size=1)
+        loginfo(f"{self.node_id}: Task_allocator: Initializing path publisher")
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
     
     def getParameters(self):
-        rospy.loginfo(f"task_allocator: getting namespace")
-        ns = rospy.get_namespace()
+        loginfo(f"task_allocator: getting namespace")
+        ns = get_namespace()
         try :
-            node_id= rospy.get_param(f'/{ns}/task_allocator/node_id') # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting node_id argument, and got : {node_id}")
+            node_id= get_param(f'/{ns}/task_allocator/node_id') # node_name/argsname
+            loginfo(f"task_allocator:Getting node_id argument, and got : {node_id}")
 
-        except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException("Invalid arguments : node_id")
+        except ROSInterruptException:
+            raise ROSInterruptException("Invalid arguments : node_id")
 
         try :
-            node_type= rospy.get_param(f'/{ns}/task_allocator/node_type') # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting node_type argument, and got : {node_type}")
+            node_type= get_param(f'/{ns}/task_allocator/node_type') # node_name/argsname
+            loginfo(f"task_allocator:Getting node_type argument, and got : {node_type}")
 
-        except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException("Invalid arguments : node_type")
+        except ROSInterruptException:
+            raise ROSInterruptException("Invalid arguments : node_type")
         
         
         try :
-            odom_topic= rospy.get_param(f'/{ns}/task_allocator/odom_topic') # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting odom_topic argument, and got : {odom_topic}")
+            odom_topic= get_param(f'/{ns}/task_allocator/odom_topic') # node_name/argsname
+            loginfo(f"task_allocator:Getting odom_topic argument, and got : {odom_topic}")
 
-        except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException("Invalid arguments : odom_topic")
+        except ROSInterruptException:
+            raise ROSInterruptException("Invalid arguments : odom_topic")
         
         try :
-            update_interval= rospy.get_param(f'/{ns}/task_allocator/update_interval',UPDATE_INTERVAL) # node_name/argsname
-            rospy.loginfo(f"task_allocator:Getting update_interval argument, and got : {update_interval}")
+            update_interval= get_param(f'/{ns}/task_allocator/update_interval',UPDATE_INTERVAL) # node_name/argsname
+            loginfo(f"task_allocator:Getting update_interval argument, and got : {update_interval}")
 
-        except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException("Invalid arguments : update_interval")
+        except ROSInterruptException:
+            raise ROSInterruptException("Invalid arguments : update_interval")
         
         return node_id,node_type,odom_topic,update_interval
     def add_goal(self,data):
@@ -246,7 +244,7 @@ class TaskAllocationManager:
         ))
         return AddGoalResponse(True)
     def update_position(self):
-        odom = rospy.wait_for_message(self.odom_topic, Odometry)
+        odom = wait_for_message(self.odom_topic, Odometry)
         self.pos_x = odom.pose.pose.position.x
         self.pos_y = odom.pose.pose.position.y
 
@@ -654,7 +652,7 @@ class TaskAllocationManager:
 if __name__ == "__main__":
     
 
-    rospy.loginfo("task_allocator:Starting the task allocation node")
+    loginfo("task_allocator:Starting the task allocation node")
     robot = TaskAllocationManager()
-    while not rospy.is_shutdown():
+    while not is_shutdown():
         robot.loop()
