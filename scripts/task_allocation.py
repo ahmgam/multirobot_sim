@@ -37,7 +37,7 @@ class Planner:
     def getTheMap(self,mapService='/static_map'):
         #wait for map service
         rospy.loginfo("simple_controller:Waiting for map service")
-        serv = rospy.ServiceProxy(mapService, GetMap)
+        serv = ServiceProxy(mapService, GetMap)
         serv.wait_for_service()
         map = serv().map
         return map
