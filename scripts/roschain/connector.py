@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 from queue import Queue
 import json
+import pickle
 import rospy
 from std_msgs.msg import String
 from paho.mqtt import client as mqtt_client
 from collections import OrderedDict
+from messages import MessagePublisher,MessageSubscriber
 class MQTTCommunicationModule:
-    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=True):
+    def __init__(self,node_id,endpoint,port,auth=None,DEBUG=False):
         self.node_id = node_id
         self.endpoint = endpoint
         self.port = port
@@ -20,8 +22,8 @@ class MQTTCommunicationModule:
         self.counter = 0
         self.timeout = 5
         rospy.loginfo(f"{self.node_id}: Connector:Initializing publisher and subscriber")
-        self.publisher = rospy.Publisher(f"/{self.node_id}/network/handle_message", String, queue_size=10)
-        self.subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_message", String, self.callback)
+        self.publisher = MessagePublisher(f"/{self.node_id}/network/handle_message")
+        self.subscriber = MessageSubscriber(f"/{self.node_id}/connector/send_message", self.callback)
         self.log_subscriber = rospy.Subscriber(f"/{self.node_id}/connector/send_log", String, self.send_log)
         rospy.loginfo(f"{self.node_id}: Connector:Initialized successfully")
 
@@ -32,19 +34,23 @@ class MQTTCommunicationModule:
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         try:
-            self.client.connect(self.endpoint, self.port)
+            self.client.connect(self.endpoint, self.port,120)
             self.client.subscribe(f"{self.base_topic}/{self.node_id}")
             self.client.subscribe(f"{self.base_topic}")
         except Exception as e:
             rospy.loginfo(f"{self.node_id}: Error connecting to MQTT: {e}")
             return
     def callback(self, data):
-        self.buffer.put({"data":json.loads(data.data),"type":"outgoing"})
+        self.buffer.put({"data":data,"type":"outgoing"})
 
     def on_message(self, client, userdata, message):
         #self.publisher.publish(json.dumps({"message":json.loads(message.payload.decode("utf-8")),"type":"incoming"}))
         #convert message to json
-        self.buffer.put({"data":json.loads(message.payload.decode("utf-8")),"type":"incoming"})
+        try:
+            self.buffer.put({"data":pickle.loads(message.payload),"type":"incoming"})
+        except:
+            print(message.payload)
+            exit()
                 
         
 
@@ -57,15 +63,16 @@ class MQTTCommunicationModule:
         if self.DEBUG:
             rospy.loginfo(f'{self.node_id}: Connector: Sending message to {message["target"]} with type {message["message"]["type"]}')
         #parse message to string
-        if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
-          message["message"] = json.dumps(message["message"])
-        else:
-          message["message"] = str(message["message"])
+        #if type(message["message"]) == OrderedDict or type(message["message"]) == dict:
+        #  message["message"] = pickle.dumps(message["message"])
+        #else:
+        #  message["message"] = str(message["message"])
+        message["message"] = pickle.dumps(message["message"])
         try:
             if message["target"] == "all":
-                self.client.publish(f"{self.base_topic}", message["message"])
+                self.client.publish(f"{self.base_topic}", message["message"], qos=2)
             else:
-                self.client.publish(f"{self.base_topic}/{message['target']}", message["message"])
+                self.client.publish(f"{self.base_topic}/{message['target']}", message["message"], qos=2)
             self.counter += 1
             return True
         except Exception as e:
@@ -73,7 +80,7 @@ class MQTTCommunicationModule:
             return False
         
     def send_log(self,message):
-        self.client.publish(f"{self.log_topic}", f"{self.node_id}|{message.data}")
+        self.client.publish(f"{self.log_topic}", f"{self.node_id}|{message.data}",qos=2)
 
     def get(self):
         #self.client.loop()
@@ -113,14 +120,15 @@ if __name__ == '__main__':
     except:
         auth = None
         rospy.loginfo(f"connector: Getting auth argument, and got : {auth}")
-    
-    auth = str(auth).split(":")
-    auth = {"username":auth[0],"password":auth[1]}
+    if auth is not None:
+        auth = str(auth).split(":")
+        auth = {"username":auth[0],"password":auth[1]}
     node = MQTTCommunicationModule(node_id,endpoint,port,auth)
     while not rospy.is_shutdown():
         if node.is_available():
             msg = node.get()
             if msg["type"] == "incoming":
-                node.publisher.publish(json.dumps(msg['data']))
+                print
+                node.publisher.publish(msg['data'])
             elif msg["type"] == "outgoing":
                 node.send(msg["data"])

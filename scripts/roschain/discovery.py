@@ -9,7 +9,7 @@ from rospy import loginfo,init_node,Publisher,Subscriber,ServiceProxy,Rate,is_sh
 from multirobot_sim.srv import FunctionCall
 from std_msgs.msg import String
 from queue import Queue
-
+from messages import MessagePublisher, MessageSubscriber
 ########################################
 # Discovery protocol
 ########################################
@@ -30,22 +30,22 @@ class DiscoveryProtocol:
         self.discovery_interval = 10
         #define discovery last call
         self.last_call = mktime(datetime.datetime.now().timetuple()) + randint(1,max_delay)
-        #publisher
-        loginfo(f"{self.node_id}: Discovery:Initializing publisher and subscriber")
-        self.publisher = Publisher(f"/{self.node_id}/network/prepare_message", String, queue_size=10)
-        #subscriber 
-        self.subscriber = Subscriber(f"/{self.node_id}/discovery/discovery_handler", String, self.put_queue)
-        #define session
-        loginfo(f"{self.node_id}: Discovery:Initializing session service")
-        self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call", FunctionCall,True)
-        self.sessions.wait_for_service()
         #define key store proxy
         loginfo(f"{self.node_id}: Discovery:Initializing key store service")
         self.key_store = ServiceProxy(f"/{self.node_id}/key_store/call", FunctionCall)
-        self.key_store.wait_for_service()
+        self.key_store.wait_for_service(timeout=100)
         #get public and private key 
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk,self.sk =EncryptionModule.reconstruct_keys(keys["pk"],keys["sk"])
+        #define session
+        loginfo(f"{self.node_id}: Discovery:Initializing session service")
+        self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call", FunctionCall,True)
+        self.sessions.wait_for_service(timeout=100)
+        #publisher
+        loginfo(f"{self.node_id}: Discovery:Initializing publisher and subscriber")
+        self.publisher = MessagePublisher(f"/{self.node_id}/network/prepare_message")
+        #subscriber 
+        self.subscriber = MessageSubscriber(f"/{self.node_id}/discovery/discovery_handler", self.put_queue)
         # queue
         self.queue = Queue()
         loginfo(f"{self.node_id}: Discovery:Initialized successfully")
@@ -60,7 +60,7 @@ class DiscoveryProtocol:
             self.discover()
             
     def put_queue(self,message):
-        self.queue.put(json.loads(message.data))
+        self.queue.put(message)
         
     def make_function_call(self,service,function_name,*args):
         args = json.dumps(args)
@@ -99,14 +99,14 @@ class DiscoveryProtocol:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting verify_discovery_response")
             self.verify_discovery_response(message)
         elif message["type"] == "discovery_verification_response":
-            if not self.except_active_session(message["node_id"]):
-                return None
+            #if not self.except_active_session(message["node_id"]):
+            #    return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting approve_discovery")
             self.approve_discovery(message)
         elif message["type"] == "discovery_approval":
-            if not self.except_active_session(message["node_id"]):
-                return None
+            #if not self.except_active_session(message["node_id"]):
+            #    return None
             if self.DEBUG:
                 loginfo(f"{self.node_id}: Received message from {message['node_id']} of type {message['type']}, starting approve_discovery_response")
             self.approve_discovery_response(message)
@@ -144,12 +144,12 @@ class DiscoveryProtocol:
     def discover(self):
         #discover new nodes on the network
         loginfo(f"{self.node_id}: Starting discovery")
-        self.publisher.publish(json.dumps({
+        self.publisher.publish({
             "target": "all",
             "time":mktime(datetime.datetime.now().timetuple()),
             "message":{ 'pk':EncryptionModule.format_public_key(self.pk)},
             "type": "discovery_request",
-            "signed":True}))
+            "signed":True})
 
     def respond_to_discovery(self,message):
         #respond to discovery requests and send challenge
@@ -161,29 +161,39 @@ class DiscoveryProtocol:
                 loginfo(f"{self.node_id}: validation error {e}")
             return None
         #check if the node has active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session_by_node_id",message.message["node_id"])
         if session:
             if self.DEBUG:    
                 loginfo(f"{self.node_id}: discovery session is already active")
             return None
         else:
+            #generate session id 
+            session_id = self.generate_session_id()
             #create new session
             session_data = {
                 "pk": message.message["message"]["data"]["pk"],
                 "role":"server",
-                "node_type": message.message["node_type"],     
+                "node_id":message.message["node_id"],
+                "node_type": message.message["node_type"],  
+                "discovery_session_id": session_id   
             }
-            self.make_function_call(self.sessions,"create_discovery_session",message.message["node_id"],session_data)
+            self.make_function_call(self.sessions,"create_discovery_session",session_id,session_data)
         #prepare discovery response message
         msg_data ={
-            "pk": EncryptionModule.format_public_key(self.pk)
+            "pk": EncryptionModule.format_public_key(self.pk),
+            "discovery_session_id": session_id   
             }
+        #print debug message
+        #if self.DEBUG:
+            #get all discovery sessions
+        #    sessions = self.make_function_call(self.sessions,"get_discovery_sessions")
+        #    loginfo(f"{self.node_id}:respond_to_discovery: attemping to connect to {message.message['node_id']}, discovery sessions : {sessions}")
         #send the message
-        self.publisher.publish(json.dumps({"target": message.message["node_id"],
+        self.publisher.publish({"target": message.message["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
                                       "message": msg_data,
                                       "type": "discovery_response",
-                                      "signed":True}))
+                                      "signed":True})
     
     def verify_discovery(self,message):
         #verify discovery request and send challenge response
@@ -195,7 +205,7 @@ class DiscoveryProtocol:
                 loginfo(f"{self.node_id}: error validating message : {e}")
             return None
         #check if the node has active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message.message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session_by_node_id",message.message["node_id"])
         if session:
             if session.get("challenge"):
                 if self.DEBUG:    
@@ -215,29 +225,37 @@ class DiscoveryProtocol:
         session_data = {
             "pk": message.message["message"]["data"]["pk"],
             "role": "client",
+            "node_id":message.message["node_id"],
             "node_type": message.message["node_type"],
             "challenge": challenge,
             "client_challenge_response": client_sol,
-            "server_challenge_response": server_sol
+            "server_challenge_response": server_sol,
+            "discovery_session_id": message.message["message"]["data"]["discovery_session_id"]
         }
         #create discovery session
-        self.make_function_call(self.sessions,"create_discovery_session",message.message["node_id"],session_data)
+        self.make_function_call(self.sessions,"create_discovery_session",message.message["message"]["data"]["discovery_session_id"],session_data)
         #prepare verification message 
         msg_data = {
             "challenge": challenge,
-            "client_challenge_response": client_sol
+            "client_challenge_response": client_sol,
+            "discovery_session_id": message.message["message"]["data"]["discovery_session_id"]
             }
+        #print debug message
+        #if self.DEBUG:
+        #    #get all discovery sessions
+        #    sessions = self.make_function_call(self.sessions,"get_discovery_sessions")
+        #    loginfo(f"{self.node_id}:verify_discovery: attemping to connect to {message.message['node_id']}, discovery sessions : {sessions}")
         #send the message
-        self.publisher.publish(json.dumps({"target": message.message["node_id"],
+        self.publisher.publish({"target": message.message["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
                                       "message": msg_data,
                                       "type": "discovery_verification",
-                                      "signed":True}))
+                                      "signed":True})
  
     def verify_discovery_response(self,message):
         #verify discovery response and add node to the network
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["message"]["data"]["discovery_session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
@@ -269,24 +287,30 @@ class DiscoveryProtocol:
             "server_challenge_response": server_sol
         }
         #update discovery session
-        self.make_function_call(self.sessions,"update_discovery_session",message.message["node_id"],session_data)
+        self.make_function_call(self.sessions,"update_discovery_session",message.message["message"]["data"]["discovery_session_id"],session_data)
         #prepare verification message
         msg_data = {
             "challenge": challenge,
-            "server_challenge_response": server_sol
+            "server_challenge_response": server_sol,
+            "discovery_session_id": message.message["message"]["data"]["discovery_session_id"]
             }
+        #print debug message
+        #if self.DEBUG:
+        #    #get all discovery sessions
+        #    sessions = self.make_function_call(self.sessions,"get_discovery_sessions")
+        #    loginfo(f"{self.node_id}:verify_discovery_response: attemping to connect to {message.message['node_id']}, discovery sessions : {sessions}")
         #send the message
-        self.publisher.publish(json.dumps({
+        self.publisher.publish({
             "target": message.message["node_id"],
             "time":mktime(datetime.datetime.now().timetuple()),
             "message": msg_data,
             "type": "discovery_verification_response",
-            "signed":True}))
+            "signed":True})
 
     def approve_discovery(self,message):
         #approve discovery request and send approval response
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["message"]["data"]["discovery_session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
@@ -308,7 +332,8 @@ class DiscoveryProtocol:
         #first generate symmetric key
         key = EncryptionModule.generate_symmetric_key()
         #get the session id
-        session_id = self.generate_session_id()
+        #session_id = self.generate_session_id()
+        session_id = message.message["message"]["data"]["discovery_session_id"]
         #create new session
         session_data = {
             "pk": session["pk"],
@@ -327,19 +352,27 @@ class DiscoveryProtocol:
         msg_data ={
             "session_id": session_id,
             "session_key": key,
-            "test_message": EncryptionModule.encrypt_symmetric("client_test",key)
+            "test_message": EncryptionModule.encrypt_symmetric("client_test",key),
+            "discovery_session_id":message.message["message"]["data"]["discovery_session_id"]
             }
+        #print debug message
+        #if self.DEBUG:
+            #get all discovery sessions
+        #    sessions = self.make_function_call(self.sessions,"get_discovery_sessions")
+            #get all connection sessions 
+        #    connection_sessions = self.make_function_call(self.sessions,"get_connection_sessions")
+        #    loginfo(f"{self.node_id}:approve_discovery: attemping to connect to {message.message['node_id']}, discovery sessions : {sessions}, connection sessions : {connection_sessions}")
         #send the message
-        self.publisher.publish(json.dumps({"target": message.message["node_id"],
+        self.publisher.publish({"target": message.message["node_id"],
                                       "time":mktime(datetime.datetime.now().timetuple()),
                                       "message": msg_data,
                                       "type": "discovery_approval",
-                                      "signed":True}))
+                                      "signed":True})
             
     def approve_discovery_response(self,message):
         #approve discovery response and add node to the network
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_discovery_session",message["node_id"])
+        session = self.make_function_call(self.sessions,"get_discovery_session",message["message"]["data"]["discovery_session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
@@ -382,24 +415,32 @@ class DiscoveryProtocol:
         #prepare approval message
         msg_data = {
             "session_id": session_id,
-            "test_message": EncryptionModule.encrypt_symmetric("server_test",key)
+            "test_message": EncryptionModule.encrypt_symmetric("server_test",key),
+            "discovery_session_id":message.message["message"]["data"]["discovery_session_id"]
             }
         #send the message
-        self.publisher.publish(json.dumps({
+        self.publisher.publish({
             "target": message.message["node_id"],
             "time":mktime(datetime.datetime.now().timetuple()),
             "message": msg_data,
             "type": "discovery_approval_response",
-            "signed":True}))
+            "signed":True})
         #delay for 1 second
         sleep(1)
         self.make_function_call(self.sessions,"create_connection_session",session_id,session_data)
+        #print debug message
+        #if self.DEBUG:
+            #get all discovery sessions
+        #    sessions = self.make_function_call(self.sessions,"get_discovery_sessions")
+            #get all connection sessions 
+        #    connection_sessions = self.make_function_call(self.sessions,"get_connection_sessions")
+        #    loginfo(f"{self.node_id}:approve_discovery_response: attemping to connect to {message.message['node_id']}, discovery sessions : {sessions}, connection sessions : {connection_sessions}")
         loginfo(f"{self.node_id}: Discovery completed successfully with {message.message['node_id']}")
 
     def finalize_discovery(self,message):
         #approve discovery response and add node to the network
         #check if the node does not have active discovery session with the sender
-        session = self.make_function_call(self.sessions,"get_connection_session_by_node_id",message["node_id"])
+        session = self.make_function_call(self.sessions,"get_connection_session",message["message"]["data"]["discovery_session_id"])
         if not session:
             if self.DEBUG:
                 loginfo(f"{self.node_id}: node does not have active discovery session with the sender")
@@ -431,6 +472,13 @@ class DiscoveryProtocol:
             "status": "active",
         }
         self.make_function_call(self.sessions,"update_connection_session",session_id,session_data)
+        #print debug message
+        #if self.DEBUG:
+            #get all discovery sessions
+        #    sessions = self.make_function_call(self.sessions,"get_discovery_sessions")
+            #get all connection sessions 
+        #    connection_sessions = self.make_function_call(self.sessions,"get_connection_sessions")
+        #    loginfo(f"{self.node_id}:finalize_discovery: attemping to connect to {message.message['node_id']}, discovery sessions : {sessions}, connection sessions : {connection_sessions}")
         loginfo(f"{self.node_id}: Discovery completed successfully with {message.message['node_id']}")
         
 if __name__ == '__main__':

@@ -12,16 +12,16 @@ class Database (object):
         #self.working = False
         self.node = rospy.init_node("database", anonymous=True)
         self.node_id = node_id
-        self.connection = sqlite3.connect(f"{path}/{node_id}.sqlite3", check_same_thread=False)
+        self.connection = sqlite3.connect(f"{path}/{node_id}.sqlite3", check_same_thread=False,timeout=10)
         self.connection.row_factory = Database.dict_factory
         self.input_queue = Queue()
         self.output_queue = Queue()
+        self.data = {}
         rospy.loginfo(f"{self.node_id}: Database:Initializing query service")
-        self.query_service = rospy.Service(f"{node_id}/database/query", DatabaseQuery, self.query_handler)
+        self.query_service = rospy.Service(f"database/query", DatabaseQuery, self.query_handler)
         if schema:
             with open(schema) as f:
                 self.connection.executescript(f.read())
-        self.data = {}
         rospy.loginfo(f"{self.node_id}: Database:Initialized successfully")
 
     def query(self, query, args=()):   
@@ -69,6 +69,8 @@ class Database (object):
         #get input request 
         while not self.input_queue.empty():
             op_id = self.input_queue.get()
+            while self.data.get(op_id) is None:
+                sleep(0.1)
             query = self.data[op_id]["query"]
             #execute query
             self.data[op_id]["result"] = self.query(query)

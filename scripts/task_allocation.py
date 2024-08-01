@@ -249,11 +249,12 @@ class TaskAllocationManager:
         self.pos_y = odom.pose.pose.position.y
 
     def sync_records(self):
-        #get new records from blockchain service 
-        records = self.get_blockchain_records(GetBCRecordsRequest(self.last_id))
+        #get new records from blockchain service
+        records = self.get_blockchain_records(self.last_id)
+        rospy.loginfo(f"task_allocator: got {len(records.transactions)} records")
         for record in records.transactions:
             record = json.loads(record)
-            record = list(record.values())[0]
+            #record = list(record.values())[0]
             self.process_record(record)
             
     def process_record(self,record):
@@ -389,12 +390,16 @@ class TaskAllocationManager:
             robots = self.get_target_best_candidates(id)
             for robot in robots:
                 if robot['node_id'] == self.node_id :
-                    best_targets.append(robot)
+                    best_targets.append({
+                        "target_id":id,
+                        "node_id":robot['node_id'],
+                        "distance":robot['distance']
+                    })
 
         #sort best targets
         best_targets.sort(key=lambda x: x['distance'], reverse=True)
         if len(best_targets) > 0:
-            target_id = best_targets[0]['node_id']
+            target_id = best_targets[0]['target_id']
         return target_id
 
     def is_task_executable(self,target_id):
@@ -430,8 +435,7 @@ class TaskAllocationManager:
             'record_type':'commit'
         }
         self.add_waiting_message(payload,'task_records')
-        msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
-        self.submit_message(msg)
+        self.submit_message('task_records',json.dumps(payload))
 
     def add_waiting_message(self,message,msg_type):
         self.waiting_message = {
@@ -507,8 +511,8 @@ class TaskAllocationManager:
             'target_id':self.ongoing_task['target_id']
         }
         self.add_waiting_message(payload,'task_records')
-        msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
-        
+        #msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
+        self.submit_message('task_records',json.dumps(payload))
     def check_ongoing_task(self):
         #check the status of ongoing task
         if self.navigation_client.get_state() == GoalStatus.SUCCEEDED:
@@ -563,8 +567,8 @@ class TaskAllocationManager:
             'details': ""
         }
         self.add_waiting_message(payload,'states')
-        msg = SubmitTransactionRequest('states',json.dumps(payload))
-        self.submit_message(msg)
+        #msg = SubmitTransactionRequest('states',json.dumps(payload))
+        self.submit_message('states',json.dumps(payload))
 
     def loop(self):
         #update position
@@ -576,12 +580,13 @@ class TaskAllocationManager:
         if status.message != 'CONNECTED':
             return
         ##check if any message is waiting
+        '''
         if not self.is_in_waiting():
             #check if time interval is reached since last state update
             if (datetime.now() - self.last_state).total_seconds() > self.update_interval:
                 self.last_state_update = datetime.now()
                 self.submit_node_state() 
-
+        '''
         #sync the robot with blockchain
         self.sync_records()
         #check if robot it idle

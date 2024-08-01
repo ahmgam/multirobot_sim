@@ -4,6 +4,7 @@
 # Encryption Module
 ################################
 import rsa
+import base64
 import os
 from cryptography.fernet import Fernet
 import json
@@ -69,29 +70,18 @@ class EncryptionManager:
         
     @staticmethod
     def format_public_key(pk):
-        #remove new line characters
-        pk = str(pk.save_pkcs1().decode('ascii'))
-        pk = pk.replace('\n-----END RSA PUBLIC KEY-----\n', '').replace('-----BEGIN RSA PUBLIC KEY-----\n','')
+        pk = base64.b64encode(pk.save_pkcs1()).decode()
         return pk
     
     @staticmethod
     def format_private_key(sk):
-        # Convert the byte string to a normal string
-        sk = str(sk.save_pkcs1().decode('ascii'))
-        # Remove the new line characters and the header and footer
-        sk = sk.replace('\n-----END RSA PRIVATE KEY-----\n', '').replace('-----BEGIN RSA PRIVATE KEY-----\n','')
+        sk=base64.b64encode(sk.save_pkcs1()).decode()
         return sk
         
-    @staticmethod
-    def reformat_public_key(pk):
-        return f"-----BEGIN RSA PUBLIC KEY-----\n{str(pk)}\n-----END RSA PUBLIC KEY-----\n"
-       
     @staticmethod 
     def generate_symmetric_key():
         return Fernet.generate_key().decode("ascii")
          
-
-
     def get_rsa_key(self):
         return {
             "pk": self.format_public_key(self.pk),
