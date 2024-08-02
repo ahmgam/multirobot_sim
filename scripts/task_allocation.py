@@ -251,7 +251,7 @@ class TaskAllocationManager:
     def sync_records(self):
         #get new records from blockchain service
         records = self.get_blockchain_records(self.last_id)
-        rospy.loginfo(f"task_allocator: got {len(records.transactions)} records")
+        loginfo(f"task_allocator: got {len(records.transactions)} records")
         for record in records.transactions:
             record = json.loads(record)
             #record = list(record.values())[0]
