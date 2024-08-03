@@ -1,15 +1,17 @@
 <launch>
   <!-- Arguments -->
     <arg name="node_id"/>
-    <arg name="node_type" default="ugv"/>
-    <arg name="endpoint" default="localhost"/>
-    <arg name="username" default="admin"/>
-    <arg name="password" default="passw123"/>
-    <arg name="port" default="1883"/>
-    <arg name="base_directory" default="$(find multirobot_sim)/scripts"/>
-    <arg name="secret" default="abc123"/>
+    <arg name="node_type"/>
+    <arg name="endpoint"/>
+    <arg name="port"/>
+    <arg name="min_nodes_num"/>
+    <arg name="secret"/>
+    <arg name="base_directory" default="$(find multirobot_sim)"/>
+    <arg name="update_interval" default="5"/>
     <arg name="max_delay" default="10.0"/>
-    <arg name="schema"/>
+    <arg name="schema" default="$(arg base_directory)/schema/schema.sql"/>
+    <arg name="timeout_interval" default="30"/>
+    
 
   <!--Robot namespace-->
     <group ns="$(arg node_id)">
@@ -17,10 +19,12 @@
         <node pkg="multirobot_sim" type="roschain.py" name="roschain" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="min_nodes_num" value="$(arg min_nodes_num)"/>
         </node>
         <node pkg="multirobot_sim" type="consensus.py" name="consensus" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="timeout_interval" value="$(arg timeout_interval)"/>
         </node>   
         <node pkg="multirobot_sim" type="network.py" name="network" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
@@ -39,19 +43,18 @@
         </node>   
         <node pkg="multirobot_sim" type="key_store.py" name="key_store" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
-            <param name="public_key_file" value="$(arg node_id)_pk.pem"/>
-            <param name="private_key_file" value="$(arg node_type)_sk.pem"/>
+            <param name="public_key_file" value="$(arg base_directory)/files/pk.pem"/>
+            <param name="private_key_file" value="$(arg base_directory)/files/sk.pem"/>
         </node>   
         <node pkg="multirobot_sim" type="connector.py" name="connector" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="endpoint" value="$(arg endpoint)"/>
-            <param name="auth" value="$(arg username):$(arg password)"/>
             <param name="port" value="$(arg port)"/>
         </node>  
         <node pkg="multirobot_sim" type="blockchain.py" name="blockchain" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
-            <param name="base_dir" value="$(arg base_directory)"/>
+            <param name="base_dir" value="$(arg base_directory)/files"/>
             <param name="secret" value="$(arg secret)"/>
         </node>  
         <node pkg="multirobot_sim" type="session.py" name="session" output="screen" required="true">
@@ -59,12 +62,13 @@
         </node> 
         <node pkg="multirobot_sim" type="database.py" name="database" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
-            <param name="db_dir" value="$(arg base_directory)"/>
+            <param name="db_dir" value="$(arg base_directory)/files"/>
             <param name="schema" value="$(arg schema)"/>
         </node>  
         <node pkg="multirobot_sim" type="dummy_transactions.py" name="dummy_transactions" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="update_interval" value="$(arg update_interval)"/>
         </node>   
     </group>
 </launch>

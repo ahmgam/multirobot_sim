@@ -1,32 +1,51 @@
 <launch>
   <!-- Arguments -->
-  <arg name="robot_name" default="ugv"/>
   <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
   <arg name="x" default="0.0"/>
   <arg name="y" default="0.0"/>
   <arg name="z" default="0.0"/>
+
+  <arg name="node_id"/>
+  <arg name="node_type"/>
+  <arg name="endpoint"/>
+  <arg name="port"/>
+  <arg name="min_nodes_num"/>
+  <arg name="secret"/>
   <!--Robot namespace-->
-  <group ns="$(arg robot_name)">
+  <group ns="$(arg node_id)">
     <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
     <!-- Spawn robot-->
-    <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model $(arg robot_name) -x $(arg x) -y $(arg y) -z $(arg z) -param robot_description" />
+    <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model $(arg node_id) -x $(arg x) -y $(arg y) -z $(arg z) -param robot_description" />
     <!-- Load joint state controller -->
     <node pkg="joint_state_publisher" type="joint_state_publisher" name="joint_state_publisher">
       <param name="use_gui" value="true"/>
       <param name="rate" value="50"/>
-      <param name="tf_prefix" value="$(arg robot_name)" />
+      <param name="tf_prefix" value="$(arg node_id)" />
     </node>
     <!-- Load robot state publisher -->
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
       <param name="publish_frequency" type="double" value="50.0" />
-      <param name="tf_prefix" value="$(arg robot_name)" />
+      <param name="tf_prefix" value="$(arg node_id)" />
     </node>
+    <node name="navigator" pkg="multirobot_sim" type="navigator.py" output="screen">
+        <param name="model_name" value="$(arg node_id)"/>
+        <param name="odom_topic" value="/$(arg node_id)/odom"/>
+        <param name="goal_topic" value="goal"/>
+        <param name="path_topic" value="path"/>
+    </node>
+    <include file="$(find multirobot_sim)/launch/blockchain.launch">
+        <arg name="node_id" value="$(arg node_id)"/>
+        <arg name="node_type" value="$(arg node_type)"/>
+        <arg name="endpoint" value="$(arg endpoint)"/>
+        <arg name="port" value="$(arg port)"/>
+        <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+        <arg name="secret" value="$(arg secret)"/>
+    </include>
     <!-- Load the controller -->
     <node pkg="multirobot_sim" type="simple_controller.py" name="simple_controller" output="screen" required="true">
-      <param name="odom_topic" value="/$(arg robot_name)/odom"/>
-      <param name="cmd_topic" value="/$(arg robot_name)/cmd_vel"/>
-      <param name="goal_topic" value="/$(arg robot_name)/goal"/>
-      <param name="path_topic" value="/$(arg robot_name)/path"/>
+      <param name="odom_topic" value="/$(arg node_id)/odom"/>
+      <param name="cmd_topic" value="/$(arg node_id)/cmd_vel"/>
+      <param name="goal_topic" value="/$(arg node_id)/goal"/>
     </node>  
   </group>
 </launch>

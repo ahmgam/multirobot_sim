@@ -1,15 +1,22 @@
 <launch>
     <!--arg name="mav_name" default="hummingbird"/-->
-    <arg name="robot_name" default="uav"/>
     <arg name="x" default="0"/>
     <arg name="y" default="0"/>
     <arg name="z" default="0"/>
     <arg name="mav_name" default="firefly"/>
+    
+    <arg name="node_id"/>
+    <arg name="node_type"/>
+    <arg name="endpoint"/>
+    <arg name="port"/>
+    <arg name="min_nodes_num"/>
+    <arg name="secret"/>
+
     <!-- env variables-->
     <env name="GAZEBO_MODEL_PATH" value="${GAZEBO_MODEL_PATH}:$(find rotors_gazebo)/models"/>
     <env name="GAZEBO_RESOURCE_PATH" value="${GAZEBO_RESOURCE_PATH}:$(find rotors_gazebo)/models"/>
     <!-- Robot namespace-->
-    <group ns="$(arg robot_name)">
+    <group ns="$(arg node_id)">
         <!--Spawn the robot-->
         <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
             <arg name="mav_name" value="$(arg mav_name)" />
@@ -17,11 +24,12 @@
             <arg name="enable_logging" value="false" />
             <arg name="enable_ground_truth" value="true" />
             <arg name="log_file" value="$(arg mav_name)"/>
-            <arg name="namespace" value="$(arg robot_name)"/>
+            <arg name="namespace" value="$(arg node_id)"/>
             <arg name="x" value="$(arg x)"/>
             <arg name="y" value="$(arg y)"/>
             <arg name="z" value="0.0"/>
         </include>
+        
         <!-- Load the controller -->
         <node name="lee_position_controller_node" pkg="rotors_control" type="lee_position_controller_node" output="screen">
             <rosparam command="load" file="$(find rotors_gazebo)/resource/lee_controller_$(arg mav_name).yaml" />
@@ -34,9 +42,24 @@
             <param name="y" value="$(arg y)"/>
             <param name="z" value="$(arg z)"/>
         </node>
+
+        <node name="navigator" pkg="multirobot_sim" type="navigator.py" output="screen">
+            <param name="model_name" value="$(arg node_id)"/>
+            <param name="odom_topic" value="/$(arg node_id)/odometry_sensor1/odometry"/>
+            <param name="goal_topic" value="goal"/>
+            <param name="path_topic" value="path"/>
+        </node>
+        <include file="$(find multirobot_sim)/launch/blockchain.launch">
+            <arg name="node_id" value="$(arg node_id)"/>
+            <arg name="node_type" value="$(arg node_type)"/>
+            <arg name="endpoint" value="$(arg endpoint)"/>
+            <arg name="port" value="$(arg port)"/>
+            <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+            <arg name="secret" value="$(arg secret)"/>
+        </include>
         <!-- Repeater node-->
         <node name="repeater" pkg="multirobot_sim" type="repeater.py" output="screen">
-            <param name="model_name" value="$(arg robot_name)"/>
+            <param name="model_name" value="$(arg node_id)"/>
             <param name="source_topic" value="goal"/>
             <param name="target_topic" value="command/pose"/>
             <param name="path_topic" value="path"/>
