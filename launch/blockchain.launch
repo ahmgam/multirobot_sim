@@ -43,8 +43,8 @@
         </node>   
         <node pkg="multirobot_sim" type="key_store.py" name="key_store" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
-            <param name="public_key_file" value="$(arg base_directory)/files/pk.pem"/>
-            <param name="private_key_file" value="$(arg base_directory)/files/sk.pem"/>
+            <param name="public_key_file" value="$(arg base_directory)/files/$(arg node_id)_pk.pem"/>
+            <param name="private_key_file" value="$(arg base_directory)/files/$(arg node_id)_sk.pem"/>
         </node>   
         <node pkg="multirobot_sim" type="connector.py" name="connector" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>

@@ -4,9 +4,8 @@
     <arg name="y" default="0"/>
     <arg name="z" default="0"/>
     <arg name="mav_name" default="firefly"/>
-    
+    <arg name="node_type" default="uav"/>
     <arg name="node_id"/>
-    <arg name="node_type"/>
     <arg name="endpoint"/>
     <arg name="port"/>
     <arg name="min_nodes_num"/>
@@ -49,14 +48,7 @@
             <param name="goal_topic" value="goal"/>
             <param name="path_topic" value="path"/>
         </node>
-        <include file="$(find multirobot_sim)/launch/blockchain.launch">
-            <arg name="node_id" value="$(arg node_id)"/>
-            <arg name="node_type" value="$(arg node_type)"/>
-            <arg name="endpoint" value="$(arg endpoint)"/>
-            <arg name="port" value="$(arg port)"/>
-            <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
-            <arg name="secret" value="$(arg secret)"/>
-        </include>
+        
         <!-- Repeater node-->
         <node name="repeater" pkg="multirobot_sim" type="repeater.py" output="screen">
             <param name="model_name" value="$(arg node_id)"/>
@@ -69,4 +61,12 @@
         <!-- joint state publisher-->
         <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
     </group>
+    <include file="$(find multirobot_sim)/launch/blockchain.launch">
+            <arg name="node_id" value="$(arg node_id)"/>
+            <arg name="node_type" value="$(arg node_type)"/>
+            <arg name="endpoint" value="$(arg endpoint)"/>
+            <arg name="port" value="$(arg port)"/>
+            <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+            <arg name="secret" value="$(arg secret)"/>
+        </include>
 </launch>

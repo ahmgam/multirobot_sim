@@ -10,6 +10,8 @@ from cv2 import resize,imread
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from multirobot_sim.srv import AddGoal,AddGoalRequest
+from multirobot_sim.srv import SubmitTransaction,SubmitTransactionRequest
+import json
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5
 ROBOT_SIZE_UGV = 0.5
@@ -263,11 +265,19 @@ class PyMonitor:
   '''
   def publishGoal(self,robot):
     if robot["goal"] is not None:
-      rospy.ServiceProxy(f"{robot['name']}/add_goal", AddGoal)(AddGoalRequest(
-      robot["goal"][0],
-      robot["goal"][1],
-      NEEDED_UAVS,
-      NEEDED_UGVS
+      rospy.ServiceProxy(f"{robot['name']}/roschain/submit_message",SubmitTransaction)(SubmitTransactionRequest(
+        'targets',
+        json.dumps(
+        {
+          "node_id":robot["name"],
+          "timecreated":rospy.Time.now().to_sec(),
+          "pos_x":robot["goal"][0],
+          "pos_y":robot["goal"][1],
+          "z":robot["goal"][2],
+          "needed_uav":NEEDED_UAVS,
+          "needed_ugv":NEEDED_UGVS
+          
+        })
       )
     )
 

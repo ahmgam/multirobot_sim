@@ -6,7 +6,7 @@
   <arg name="z" default="0.0"/>
 
   <arg name="node_id"/>
-  <arg name="node_type"/>
+  <arg name="node_type" default="ugv"/>
   <arg name="endpoint"/>
   <arg name="port"/>
   <arg name="min_nodes_num"/>
@@ -33,14 +33,7 @@
         <param name="goal_topic" value="goal"/>
         <param name="path_topic" value="path"/>
     </node>
-    <include file="$(find multirobot_sim)/launch/blockchain.launch">
-        <arg name="node_id" value="$(arg node_id)"/>
-        <arg name="node_type" value="$(arg node_type)"/>
-        <arg name="endpoint" value="$(arg endpoint)"/>
-        <arg name="port" value="$(arg port)"/>
-        <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
-        <arg name="secret" value="$(arg secret)"/>
-    </include>
+    
     <!-- Load the controller -->
     <node pkg="multirobot_sim" type="simple_controller.py" name="simple_controller" output="screen" required="true">
       <param name="odom_topic" value="/$(arg node_id)/odom"/>
@@ -48,4 +41,12 @@
       <param name="goal_topic" value="/$(arg node_id)/goal"/>
     </node>  
   </group>
+  <include file="$(find multirobot_sim)/launch/blockchain.launch">
+        <arg name="node_id" value="$(arg node_id)"/>
+        <arg name="node_type" value="$(arg node_type)"/>
+        <arg name="endpoint" value="$(arg endpoint)"/>
+        <arg name="port" value="$(arg port)"/>
+        <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+        <arg name="secret" value="$(arg secret)"/>
+    </include>
 </launch>

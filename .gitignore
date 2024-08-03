@@ -1,3 +1,5 @@
 scripts/roschain/__pycache__/*.pyc
 scripts/__pycache__/*.pyc
 scripts/*.sqlite3
+files/*
+*.pyc

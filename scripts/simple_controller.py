@@ -70,10 +70,11 @@ class SimpleController:
         self.headingController =PID(*headingCntParams)
         self.distanceController = PID(*linearCntParams)
         self.goal = None
-        self.rate = rospy.Rate(20) # 10hz
+         # 10hz
         #initialize node
         rospy.loginfo("simple_controller:Initializing node")
         rospy.init_node('simple_controller', anonymous=True)
+        self.rate = rospy.Rate(20)
         try:
             rospy.loginfo("simple_controller:Creating cmd publisher")
             self.cmdPublisher = rospy.Publisher(self.cmd_vel_topic, Twist, queue_size=10)

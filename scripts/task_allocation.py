@@ -578,15 +578,11 @@ class TaskAllocationManager:
         if status.success == False:
             return
         if status.message != 'CONNECTED':
-            return
-        ##check if any message is waiting
-        '''
-        if not self.is_in_waiting():
-            #check if time interval is reached since last state update
-            if (datetime.now() - self.last_state).total_seconds() > self.update_interval:
-                self.last_state_update = datetime.now()
-                self.submit_node_state() 
-        '''
+            return  
+        #check if time interval is reached since last state update
+        if (datetime.now() - self.last_state).total_seconds() > self.update_interval:
+            self.last_state_update = datetime.now()
+            self.submit_node_state() 
         #sync the robot with blockchain
         self.sync_records()
         #check if robot it idle

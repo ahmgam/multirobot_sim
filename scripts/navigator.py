@@ -7,8 +7,8 @@ from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped,Point,Pose
 from geometry_msgs.msg import Twist
 from actionlib import SimpleActionServer
-from multirobot_sim.msg import Path
-from multirobot_sim.action import NavigatonAction
+from nav_msgs.msg import Path
+from multirobot_sim.msg import NavigationActionAction
 goal = None
 
 WHEEL_DIAMETER = 0.066
@@ -151,7 +151,7 @@ class Navigator:
         self.rate = rospy.Rate(20) # 10hz
 
         #define action server
-        self.actionServer = SimpleActionServer('navigator',NavigatonAction,execute_cb=lambda goal: self.execute(goal,self),feedback_cb=lambda goal: self.feedback(goal,self),auto_start=True)
+        self.actionServer = SimpleActionServer('navigator',NavigationActionAction,execute_cb=lambda goal: self.execute(goal,self),feedback_cb=lambda goal: self.feedback(goal,self),auto_start=True)
 
     @staticmethod    
     def execute(path,controller):
