@@ -17,11 +17,11 @@ class Database (object):
         self.input_queue = Queue()
         self.output_queue = Queue()
         self.data = {}
-        rospy.loginfo(f"{self.node_id}: Database:Initializing query service")
-        self.query_service = rospy.Service(f"database/query", DatabaseQuery, self.query_handler)
         if schema:
             with open(schema) as f:
                 self.connection.executescript(f.read())
+        rospy.loginfo(f"{self.node_id}: Database:Initializing query service")
+        self.query_service = rospy.Service(f"/{self.node_id}/database/query", DatabaseQuery, self.query_handler)
         rospy.loginfo(f"{self.node_id}: Database:Initialized successfully")
 
     def query(self, query, args=()):   

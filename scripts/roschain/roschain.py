@@ -33,13 +33,8 @@ class RosChain:
         self.node = init_node("roschain", anonymous=True)
         #define eady flag
         self.ready = False
+        self.counter=0
         
-        #define records service
-        loginfo(f"{self.node_id}: ROSChain:Initializing records service")
-        self.get_record_service = Service(f"/{self.node_id}/roschain/get_records",GetBCRecords,lambda req: self.get_records(req))
-        #define submit message service
-        loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
-        self.submit_message_service = Service(f"/{self.node_id}/roschain/submit_message",SubmitTransaction,self.submit_message)
         #init sessions
         loginfo(f"{self.node_id}: SBFT:Initializing sessions service")
         self.sessions = ServiceProxy(f"/{self.node_id}/sessions/call",FunctionCall,True)
@@ -51,14 +46,19 @@ class RosChain:
         #define consensus service
         loginfo(f"{self.node_id}: ROSChain:Initializing consensus service")
         self.consensus = MessagePublisher(f"/{self.node_id}/consensus/consensus_handler")
-        loginfo(f"{self.node_id}: RSOChain:Initialized successfully")
-        #initialize ready service
-        self.is_ready_service = Service(f"/{self.node_id}/roschain/is_ready",Trigger,self.is_ready)
         #define connector log publisher
         self.log_publisher = Publisher(f"/{self.node_id}/connector/send_log", String, queue_size=10)
-        self.counter=0
+        #initialize ready service
+        self.is_ready_service = Service(f"/{self.node_id}/roschain/is_ready",Trigger,self.is_ready)
+        #define records service
+        loginfo(f"{self.node_id}: ROSChain:Initializing records service")
+        self.get_record_service = Service(f"/{self.node_id}/roschain/get_records",GetBCRecords,lambda req: self.get_records(req))
+        #define submit message service
+        loginfo(f"{self.node_id}: ROSChain:Initializing submit message service")
+        self.submit_message_service = Service(f"/{self.node_id}/roschain/submit_message",SubmitTransaction,self.submit_message)
         self.min_num_connected_time = None
         self.ready = True
+        loginfo(f"{self.node_id}: RSOChain:Initialized successfully")
         
     def is_ready(self,msg):
         is_connected =len(self.make_function_call(self.sessions,"get_active_nodes")) >= self.min_nodes_num

@@ -128,7 +128,7 @@ class Navigator:
 
         try:
             rospy.loginfo("navigator:Creating cmd publisher")
-            self.goalPublisher = rospy.Publisher(self.goal_topic, Twist, queue_size=10)
+            self.goalPublisher = rospy.Publisher(self.goal_topic,PoseStamped, queue_size=10)
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("navigator:Error creating cmd subscriber")
 
@@ -151,7 +151,7 @@ class Navigator:
         self.rate = rospy.Rate(20) # 10hz
 
         #define action server
-        self.actionServer = SimpleActionServer('navigator',NavigationActionAction,execute_cb=lambda goal: self.execute(goal,self),feedback_cb=lambda goal: self.feedback(goal,self),auto_start=True)
+        self.actionServer = SimpleActionServer('navigator',NavigationActionAction,execute_cb=lambda goal: self.execute(goal,self),auto_start=True)
 
     @staticmethod    
     def execute(path,controller):

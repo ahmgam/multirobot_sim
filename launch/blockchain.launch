@@ -64,11 +64,6 @@
             <param name="node_id" value="$(arg node_id)"/>
             <param name="db_dir" value="$(arg base_directory)/files"/>
             <param name="schema" value="$(arg schema)"/>
-        </node>  
-        <node pkg="multirobot_sim" type="dummy_transactions.py" name="dummy_transactions" output="screen" required="true">
-            <param name="node_id" value="$(arg node_id)"/>
-            <param name="node_type" value="$(arg node_type)"/>
-            <param name="update_interval" value="$(arg update_interval)"/>
-        </node>   
+        </node> 
     </group>
 </launch>
