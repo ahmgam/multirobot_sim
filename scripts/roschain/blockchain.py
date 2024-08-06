@@ -627,8 +627,8 @@ class Blockchain:
     def get_blockchain(self,start_id=None,end_id = None):
         if start_id is None or start_id < 0:
             start_id = 0
-        if end_id is None or end_id > self.db.get_last_id("blockchain"):
-            end_id = self.db.get_last_id("blockchain")
+        if end_id is None or end_id > self.db.get_last_id("block"):
+            end_id = self.db.get_last_id("block")
         blockchain = []
         for i in range(start_id,end_id+1):
             blockchain.append(self.get_transaction(i))

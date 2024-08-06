@@ -177,13 +177,14 @@ class TaskAllocationManager:
         self.waiting_message = None
         self.ongoing_task = None
         self.last_id = 1
-        self.get_blockchain_records = ServiceProxy(f'get_records',GetBCRecords)
+        loginfo(f"{self.node_id}: Task_allocator: Initializing services")
+        self.get_blockchain_records = ServiceProxy(f'/{self.node_id}/roschain/get_records',GetBCRecords)
         self.get_blockchain_records.wait_for_service(timeout=25)
         loginfo(f"{self.node_id}: Task_allocator: Initializing get_status service client")
-        self.chain_status = ServiceProxy(f'get_status',Trigger)
+        self.chain_status = ServiceProxy(f'/{self.node_id}/roschain/is_ready',Trigger)
         self.chain_status.wait_for_service(timeout=25)
         loginfo(f"{self.node_id}: Task_allocator: Initializing get_records service client")
-        self.submit_message = ServiceProxy(f'submit_message',SubmitTransaction)
+        self.submit_message = ServiceProxy(f'/{self.node_id}/roschain/submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
         loginfo(f"{self.node_id}: Task_allocator: Initializing submit_message service client")
         self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
@@ -200,14 +201,14 @@ class TaskAllocationManager:
         loginfo(f"task_allocator: getting namespace")
         ns = get_namespace()
         try :
-            node_id= get_param(f'/{ns}/task_allocator/node_id') # node_name/argsname
+            node_id= get_param(f'/{ns}/task_allocation/node_id') # node_name/argsname
             loginfo(f"task_allocator:Getting node_id argument, and got : {node_id}")
 
         except ROSInterruptException:
             raise ROSInterruptException("Invalid arguments : node_id")
 
         try :
-            node_type= get_param(f'/{ns}/task_allocator/node_type') # node_name/argsname
+            node_type= get_param(f'/{ns}/task_allocation/node_type') # node_name/argsname
             loginfo(f"task_allocator:Getting node_type argument, and got : {node_type}")
 
         except ROSInterruptException:
@@ -215,14 +216,14 @@ class TaskAllocationManager:
         
         
         try :
-            odom_topic= get_param(f'/{ns}/task_allocator/odom_topic') # node_name/argsname
+            odom_topic= get_param(f'/{ns}/task_allocation/odom_topic') # node_name/argsname
             loginfo(f"task_allocator:Getting odom_topic argument, and got : {odom_topic}")
 
         except ROSInterruptException:
             raise ROSInterruptException("Invalid arguments : odom_topic")
         
         try :
-            update_interval= get_param(f'/{ns}/task_allocator/update_interval',UPDATE_INTERVAL) # node_name/argsname
+            update_interval= get_param(f'/{ns}/task_allocation/update_interval',UPDATE_INTERVAL) # node_name/argsname
             loginfo(f"task_allocator:Getting update_interval argument, and got : {update_interval}")
 
         except ROSInterruptException:
@@ -574,15 +575,19 @@ class TaskAllocationManager:
         #update position
         self.update_position()
         #wait until chain is ready
+        
         status = self.chain_status()
-        if status.success == False:
+        
+        if status.success == False or status.message != 'Ready':
+            loginfo(f"{self.node_id}: Task_allocator: Waiting for chain to be ready, current status is {status.message}")
             return
-        if status.message != 'CONNECTED':
-            return  
+      
+        loginfo(f"{self.node_id}: Task_allocator: Chain is ready, checking for last state update")
         #check if time interval is reached since last state update
         if (datetime.now() - self.last_state).total_seconds() > self.update_interval:
             self.last_state_update = datetime.now()
             self.submit_node_state() 
+            loginfo(f"{self.node_id}: Task_allocator: Node state submitted")
         #sync the robot with blockchain
         self.sync_records()
         #check if robot it idle

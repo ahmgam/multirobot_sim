@@ -56,6 +56,12 @@
             <param name="target_topic" value="command/pose"/>
             <param name="path_topic" value="path"/>
         </node>
+        <!-- Task allocation-->
+        <node name="task_allocation" pkg="multirobot_sim" type="task_allocation.py" output="screen">
+            <param name="node_id" value="$(arg node_id)"/>
+            <param name="node_type" value="$(arg node_type)"/>
+            <param name="odom_topic" value="/$(arg node_id)/odometry_sensor1/odometry"/>
+        </node>
         <!-- robot state publisher-->
         <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
         <!-- joint state publisher-->

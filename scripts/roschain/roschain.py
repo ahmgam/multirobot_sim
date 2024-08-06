@@ -115,7 +115,7 @@ class RosChain:
     def get_records(self,last_record):
         records = []
         try:
-            for id in range(last_record.last_trans_id,int(self.make_function_call(self.blockchain,"get_last_id","blockchain"))+1):
+            for id in range(last_record.last_trans_id,int(self.make_function_call(self.blockchain,"get_last_id","block"))+1):
                 meta,data = self.make_function_call(self.blockchain,"get_transaction",id)
                 records.append(json.dumps({
                     f"{id}":{"meta":meta,"data":data}

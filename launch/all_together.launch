@@ -22,7 +22,7 @@
   <arg name="ugv_x_2" default="2.0"/>
   <arg name="endpoint" default="localhost"/>
   <arg name="port" default="1883"/>
-  <arg name="min_nodes_num" default="5"/>
+  <arg name="min_nodes_num" default="1"/>
   <arg name="secret" default="f051a253c62a4829"/>
   <!-- Load the world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
