@@ -558,7 +558,7 @@ class TaskAllocationManager:
             
     def submit_node_state(self):
         #submit node state to blockchain
-        print('submit node state')
+        loginfo('Task_allocator: submit node state')
         payload = {
             'node_id':self.node_id,
             'node_type':self.node_type,

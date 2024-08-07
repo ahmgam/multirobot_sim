@@ -92,7 +92,8 @@ class Database (object):
         if str(value).isnumeric():
             return
         if not type(value) == self.tabels[table]["columns"][column]["type"]:
-            raise Exception(f"Wrong data type for {column} ,data type : {type(value)} , expected : {self.tabels[table]['columns'][column]['type']}")
+            print
+            raise Exception(f"Wrong data type for {column} in table {table} ,data : {value} and type : {type(value)} , expected : {self.tabels[table]['columns'][column]['type']}")
         
     def insert(self,table_name,*keywords):
         #check if table exists
@@ -606,6 +607,7 @@ class Blockchain:
         transaction_data = self.get_metadata(transaction_id)
         if not transaction_data[0]:
             return None,None
+        transaction_data = transaction_data[1]
         item_data = self.get_record(transaction_data["item_table"],transaction_data["item_id"])
         if not item_data:
             return None,None
@@ -616,10 +618,10 @@ class Blockchain:
         if not transaction_data:
             return None,None
         else:
-            return transaction_data[0]
+            return True,transaction_data[0]
     
     def get_record(self,table,record_id):
-        return self.db.select(table,["*"],{"id":record_id})[0]
+        return self.db.select(table,["*"],("id",'==',record_id))[0]
     
     def filter_records(self,table,filter):
         return self.db.select(table,["*"],filter)
@@ -627,11 +629,12 @@ class Blockchain:
     def get_blockchain(self,start_id=None,end_id = None):
         if start_id is None or start_id < 0:
             start_id = 0
-        if end_id is None or end_id > self.db.get_last_id("block"):
-            end_id = self.db.get_last_id("block")
+        if end_id is None or end_id > self.db.get_last_id("transactions"):
+            end_id = self.db.get_last_id("transactions")
         blockchain = []
         for i in range(start_id,end_id+1):
-            blockchain.append(self.get_transaction(i))
+            meta , item = self.get_transaction(i)
+            blockchain.append({"meta":meta,"data":item})
         return blockchain
 
     def __get_previous_hash(self,last_transaction_id=None):

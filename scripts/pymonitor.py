@@ -12,6 +12,7 @@ from nav_msgs.msg import Path
 from multirobot_sim.srv import AddGoal,AddGoalRequest
 from multirobot_sim.srv import SubmitTransaction,SubmitTransactionRequest
 import json
+from datetime import datetime
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5
 ROBOT_SIZE_UGV = 0.5
@@ -270,7 +271,7 @@ class PyMonitor:
         json.dumps(
         {
           "node_id":robot["name"],
-          "timecreated":rospy.Time.now().to_sec(),
+          "timecreated":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
           "pos_x":robot["goal"][0],
           "pos_y":robot["goal"][1],
           "z":robot["goal"][2],
