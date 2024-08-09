@@ -259,6 +259,8 @@ class TaskAllocationManager:
             self.process_record(record)
             
     def process_record(self,record):
+        if record['data']['node_id'] not in self.idle.keys():
+                self.idle[record['data']['node_id']] = True
         if record['meta']['item_table'] == 'states':
             self.robots[record['data']['node_id']] = record['data']
         if record['meta']['item_table'] == 'targets':
@@ -565,7 +567,7 @@ class TaskAllocationManager:
             'pos_y':self.pos_y,
             'details': ""
         }
-        self.add_waiting_message(payload,'states')
+        #self.add_waiting_message(payload,'states')
         #msg = SubmitTransactionRequest('states',json.dumps(payload))
         self.submit_message('states',json.dumps(payload))
 
@@ -600,15 +602,19 @@ class TaskAllocationManager:
         is_committed,record = self.is_committed()
         if not is_committed:
             #get best target for me
+            loginfo(f"{self.node_id}: Task_allocator: Checking for best target@@@")
             target_id = self.get_best_target()
             if target_id == None:
+                loginfo(f"{self.node_id}: Task_allocator: from targets {self.targets} No target found@@@")
                 return 
+            loginfo(f"{self.node_id}: Task_allocator: Target found@@@")
             #commit to target
             self.commmit_to_target(target_id)
             return
         if not self.is_task_fully_committed(record['target_id']):
             return
         
+        loginfo(f"{self.node_id}: Task_allocator: Task is fully committed@@@")
         is_submitted,path = self.is_path_submitted(record['target_id'])
         if not is_submitted:
             #plan a path for the target and submit it to waiting list
@@ -625,11 +631,13 @@ class TaskAllocationManager:
             #submit path to waiting list
             self.submit_path(record['target_id'],record['id'],path)
             return
+        loginfo(f"{self.node_id}: Task_allocator: Path is submitted@@@")
         
         #check if paths is all there 
         if not self.is_task_executable(record['target_id']):
             return
         
+        loginfo(f"{self.node_id}: Task_allocator: Task is executable@@@")
         #check if there any conflicts
         conflicted_ids = self.check_conflict(record['target_id'])
 
@@ -639,12 +647,15 @@ class TaskAllocationManager:
             self.start_task(path)
             return
         
+        loginfo(f"{self.node_id}: Task_allocator: Conflict detected@@@")
+        
         #if found conflict, check if I need to plan path again
         is_conflicted = False
         for conf in conflicted_ids:
             if record["id"] in conf:
                 is_conflicted = True
                 break
+        
         if is_conflicted:
             path = self.plan_path(record['target_id'],True)
             if path == None:
