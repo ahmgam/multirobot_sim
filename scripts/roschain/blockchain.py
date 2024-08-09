@@ -105,7 +105,8 @@ class Database (object):
         #check if fields are valid
         for keyword,value in keywords:
             if not self.__column_exists(table_name,keyword):
-                raise Exception(f"Column does not exists : {keyword}")
+                print(keywords)
+                raise Exception(f"Column  {keyword} does not exists in table {table_name} ")
             self.__check_column_type(table_name,keyword,value)
 
         #build query

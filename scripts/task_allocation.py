@@ -497,11 +497,9 @@ class TaskAllocationManager:
         if message!= None and msg_type != None:
             if type(message) == str:
                 message = json.loads(message)
-            if msg_type != self.waiting_message['type']:
+            if message != json.dumps(self.waiting_message['message']) and msg_type != self.waiting_message['type']:
                 return False
-            for key in list(set(message.keys()).intersection(set(self.waiting_message['message'].keys()))):
-                if self.waiting_message['message'][key] != message[key]:
-                    return False
+            loginfo(f"{self.node_id}: Task_allocator: Waiting for {msg_type} message@@@")
             return True
         return True
     def send_complete_message(self):

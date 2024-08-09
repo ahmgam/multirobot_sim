@@ -274,7 +274,6 @@ class PyMonitor:
           "timecreated":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
           "pos_x":robot["goal"][0],
           "pos_y":robot["goal"][1],
-          "z":robot["goal"][2],
           "needed_uav":NEEDED_UAVS,
           "needed_ugv":NEEDED_UGVS
           
