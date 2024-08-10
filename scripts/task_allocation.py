@@ -14,7 +14,7 @@ from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
 
 #default value of state update interval
-UPDATE_INTERVAL = 3
+UPDATE_INTERVAL = 10
 class Planner:
     def __init__(self,odom_topic,algorithm=None):
         self.path = Path()
@@ -252,13 +252,13 @@ class TaskAllocationManager:
     def sync_records(self):
         #get new records from blockchain service
         records = self.get_blockchain_records(self.last_id)
-        loginfo(f"task_allocator: got {len(records.transactions)} records")
         for record in records.transactions:
             record = json.loads(record)
             #record = list(record.values())[0]
             self.process_record(record)
             
     def process_record(self,record):
+        loginfo(f"{self.node_id}: Task_allocator: Processing record of type {record['meta']['item_table']}")
         if record['data']['node_id'] not in self.idle.keys():
                 self.idle[record['data']['node_id']] = True
         if record['meta']['item_table'] == 'states':
@@ -267,7 +267,8 @@ class TaskAllocationManager:
             self.targets[record['data']['node_id']] = record['data']
         if record['meta']['item_table'] == 'task_records':
             data = record['data']
-            if record['record_type'] == 'commit':
+            print(f"task record is {data} and ")
+            if data['record_type'] == 'commit':
                 self.idle[data['node_id']] = False
             else:
                 self.idle[data['node_id']] = True
@@ -359,8 +360,8 @@ class TaskAllocationManager:
     def get_target_best_candidates(self,target_id):
         #get task details 
         goal = self.targets[target_id]['pos_x'],self.targets[target_id]['pos_y']
+        distances = []
         for robot in self.robots.values():
-            distances = []
             if self.is_robot_idle(robot['node_id']):
                 robot_pos = robot['pos_x'],robot['pos_y']
                 distances.append({
@@ -394,7 +395,7 @@ class TaskAllocationManager:
             for robot in robots:
                 if robot['node_id'] == self.node_id :
                     best_targets.append({
-                        "target_id":id,
+                        "target_id":target['id'],
                         "node_id":robot['node_id'],
                         "distance":robot['distance']
                     })
@@ -434,8 +435,9 @@ class TaskAllocationManager:
         #prepare payload
         payload = {
             'node_id':self.node_id,
-            'target_id':target,
-            'record_type':'commit'
+            'target_id':int(target),
+            'record_type':'commit',
+            'timecreated':datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         self.add_waiting_message(payload,'task_records')
         self.submit_message('task_records',json.dumps(payload))
@@ -496,10 +498,11 @@ class TaskAllocationManager:
         if self.waiting_message == None:
             return False
         #check if message is in waiting
+        print(f"waiting message is {self.waiting_message}")
         if message!= None and msg_type != None:
-            if type(message) == str:
-                message = json.loads(message)
-            if message != json.dumps(self.waiting_message['message']) and msg_type != self.waiting_message['type']:
+            if message.get('id') != None:
+                message.pop('id')
+            if message["node_id"] != self.node_id or msg_type != self.waiting_message['type']:
                 return False
             loginfo(f"{self.node_id}: Task_allocator: Waiting for {msg_type} message@@@")
             return True
@@ -509,7 +512,8 @@ class TaskAllocationManager:
         payload = {
             'node_id':self.node_id,
             'record_type':'complete',
-            'target_id':self.ongoing_task['target_id']
+            'target_id':self.ongoing_task['target_id'],
+            'timecreated':datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         self.add_waiting_message(payload,'task_records')
         #msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
