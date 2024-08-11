@@ -950,7 +950,7 @@ if __name__ == "__main__":
         raise ROSInterruptException("Invalid arguments : base_dir")
     
     
-    node = Blockchain(node_id,node_type,secret,base_dir,DEBUG=True)
+    node = Blockchain(node_id,node_type,secret,base_dir,DEBUG=False)
     #define rate 
     rate = Rate(10)
     

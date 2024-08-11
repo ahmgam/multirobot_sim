@@ -264,7 +264,9 @@ class TaskAllocationManager:
         if record['meta']['item_table'] == 'states':
             self.robots[record['data']['node_id']] = record['data']
         if record['meta']['item_table'] == 'targets':
-            self.targets[record['data']['node_id']] = record['data']
+            self.targets[record['data']['id']] = record['data']
+            self.tasks[record['data']['id']]= []
+            self.paths[record['data']['id']] = {}
         if record['meta']['item_table'] == 'task_records':
             data = record['data']
             print(f"task record is {data} and ")
@@ -273,7 +275,7 @@ class TaskAllocationManager:
             else:
                 self.idle[data['node_id']] = True
             if data['target_id'] in self.tasks.keys():
-                self.tasks[data['targetid']].append(data)
+                self.tasks[data['target_id']].append(data)
             else:
                 self.tasks[data['target_id']] = [data]
             self.records[data['id']] = data
@@ -282,12 +284,12 @@ class TaskAllocationManager:
 
         if record['meta']['item_table'] == 'path':
             data = record['data']
-            target_id = self.records[data['commit_id']]['target_id']
+            target_id = data['target_id']
             if target_id in self.paths.keys():
-                self.paths[target_id][data['commit_id']] = data
+                self.paths[target_id][data['node_id']] = data
             else:
-                self.paths[target_id] = {}
-                self.records[target_id][data['commit_id']] = data
+                self.paths[target_id] = {data['node_id']:data}
+                self.records[data["id"]][data['node_id']] = data
         self.last_id = record['meta']['id']
         if self.is_in_waiting(record['data'],record['meta']['item_table']):
                 self.waiting_message = None
@@ -298,15 +300,15 @@ class TaskAllocationManager:
     def is_task_fully_committed(self,task_id):
         #check all records in task
         task = self.tasks[task_id]
-        req_uav = int(self.targets[task[0]['target_id']]['needed_uav'])
-        req_ugv = int(self.targets[task[0]['target_id']]['needed_ugv'])
+        req_uav = int(self.targets[task_id]['needed_uav'])
+        req_ugv = int(self.targets[task_id]['needed_ugv'])
         committed_uav = 0
         committed_ugv = 0
         for record in task:
             if record['record_type'] == 'commit':
-                if record['node_type'] == 'uav':
+                if self.robots[record['node_id']]['node_type'] == 'uav':
                     committed_uav += 1
-                if record['node_type'] == 'ugv':
+                if self.robots[record['node_id']]['node_type'] == 'ugv':
                     committed_ugv += 1
         if committed_ugv == req_ugv and committed_uav == req_uav:
             return True
@@ -320,16 +322,16 @@ class TaskAllocationManager:
         req_ugv = int(self.targets[task_id]['needed_ugv'])
         planned_uav = {}
         planned_ugv = {}
-        for commit_id,path in paths.items():
+        for node_id,path in paths[task_id].items():
             if path['node_type'] == 'uav':
-                planned_uav[commit_id] = path
+                planned_uav[node_id] = path
             if path['node_type'] == 'ugv':
-                planned_ugv[commit_id] = path
+                planned_ugv[node_id] = path
 
         if len(planned_uav.keys()) != req_uav or len(planned_ugv.keys()) != req_ugv:
             return False
         #check paths conflicts 
-        return self.check_conflict([p["path_points"] for p in paths.values()]) and self.check_conflict([planned_uav[p]["path_points"] for p in planned_uav.keys()])
+        return self.check_conflict(task_id)
             
     def is_task_completed(self,task_id):
         #check all records in task
@@ -490,7 +492,7 @@ class TaskAllocationManager:
         for task in self.tasks.values():
             for record in task:
                 if record['node_id'] == self.node_id and record['record_type'] == 'commit':
-                    return True,self.records[record['id']]
+                    return True,record
         return False,None
     
     
@@ -498,7 +500,8 @@ class TaskAllocationManager:
         if self.waiting_message == None:
             return False
         #check if message is in waiting
-        print(f"waiting message is {self.waiting_message}")
+        if msg_type == "task_records":
+            loginfo(f"{self.node_id}: Task_allocator: Waiting : {self.waiting_message} andn got {message} for task_records mf@@@")
         if message!= None and msg_type != None:
             if message.get('id') != None:
                 message.pop('id')
@@ -525,12 +528,12 @@ class TaskAllocationManager:
             self.idle[self.node_id] = True
             #send complete message to blockchain
             self.send_complete_message()
+            self.ongoing_task = None
         return
 
     def is_path_submitted(self,target_id):
-        for path in self.paths[target_id].values():
-            if path['node_type'] == 'uav':
-                return True,path
+        if self.paths[target_id].get(self.node_id) != None:
+            return True,self.path[target_id][self.node_id]["path_points"]
         return False,None
     
     def calculate_path_legnth(self,points):
@@ -539,24 +542,21 @@ class TaskAllocationManager:
             length += self.caluculate_distance(points[i],points[i+1])
         return length
 
-    def submit_path(self,target_id,commit_id,path,path_type='initial'):
+    def submit_path(self,target_id,path):
         #prepare payload
         payload = {
             'node_id':self.node_id,
             'target_id':target_id,
-            'path_type':path_type,
             'node_type': self.node_type,
-            'commit_id':commit_id,
             'path_points':json.dumps(path),
-            'x_pos': self.targets[target_id]['pos_x'],
-            'y_pos': self.targets[target_id]['pos_y'],
+            'pos_x': self.targets[target_id]['pos_x'],
+            'pos_y': self.targets[target_id]['pos_y'],
             'distance':self.calculate_path_legnth(path)
         }
         self.add_waiting_message(payload,'paths')
-        msg = SubmitTransaction(table_name='paths',message=json.dumps(payload))
-        self.submit_message(msg)
+        self.submit_message(table_name='paths',message=json.dumps(payload))
     def plan_path(self,target_id,avoid_conflicts= False):
-        self.planner.setGoal((self.targets[target_id]['pos_x'],self.targets[target_id]['pos_y']))
+        self.planner.setGoal(x=self.targets[target_id]['pos_x'],y=self.targets[target_id]['pos_y'],z=0)
         self.planner.plan()
         return self.planner.path
             
@@ -586,16 +586,15 @@ class TaskAllocationManager:
             loginfo(f"{self.node_id}: Task_allocator: Waiting for chain to be ready, current status is {status.message}")
             return
       
-        loginfo(f"{self.node_id}: Task_allocator: Chain is ready, checking for last state update")
         #check if time interval is reached since last state update
         if (datetime.now() - self.last_state).total_seconds() > self.update_interval:
-            self.last_state_update = datetime.now()
+            self.last_state = datetime.now()
             self.submit_node_state() 
             loginfo(f"{self.node_id}: Task_allocator: Node state submitted")
         #sync the robot with blockchain
         self.sync_records()
         #check if robot it idle
-        if not self.is_robot_idle(self.node_id):
+        if self.ongoing_task != None:
             self.check_ongoing_task()
             return
         
@@ -633,7 +632,8 @@ class TaskAllocationManager:
             if path == None:
                 return
             #submit path to waiting list
-            self.submit_path(record['target_id'],record['id'],path)
+            loginfo(f"{self.node_id}: {record} is commitrecord@@@")
+            self.submit_path(record['target_id'],path)
             return
         loginfo(f"{self.node_id}: Task_allocator: Path is submitted@@@")
         
@@ -664,7 +664,7 @@ class TaskAllocationManager:
             path = self.plan_path(record['target_id'],True)
             if path == None:
                 return
-            self.submit_path(record['target_id'],record['id'],path,'reset')
+            self.submit_path(record['target_id'],record['id'],path)
 
 
 

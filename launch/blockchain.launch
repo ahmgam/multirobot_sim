@@ -11,6 +11,7 @@
     <arg name="max_delay" default="10.0"/>
     <arg name="schema" default="$(arg base_directory)/schema/schema.sql"/>
     <arg name="timeout_interval" default="30"/>
+    <arg name="debug" default="false"/>
     
 
   <!--Robot namespace-->

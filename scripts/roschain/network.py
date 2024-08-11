@@ -300,7 +300,7 @@ if __name__ == "__main__":
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : node_type")
     
-    network = NetworkInterface(node_id,node_type)
+    network = NetworkInterface(node_id,node_type,DEBUG=False)
     rate = Rate(10)
     counter = 0
     while not is_shutdown():

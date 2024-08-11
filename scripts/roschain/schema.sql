@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS paths (
     pos_x REAL NOT NULL,
     pos_y REAL NOT NULL,
     target_id INTEGER NOT NULL,
-    commit_id INTEGER NOT NULL,
     path_points TEXT NOT NULL,
     distance REAL NOT NULL,
     timecreated TEXT NOT NULL

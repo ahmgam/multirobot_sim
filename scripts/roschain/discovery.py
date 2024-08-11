@@ -508,7 +508,7 @@ if __name__ == '__main__':
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : max_delay")
     
-    node = DiscoveryProtocol(node_id,node_type,secret,max_delay,DEBUG=True)
+    node = DiscoveryProtocol(node_id,node_type,secret,max_delay,DEBUG=False)
     #define rate
     rate = Rate(10)
     while not is_shutdown():
