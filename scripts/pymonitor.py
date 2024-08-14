@@ -341,10 +341,6 @@ class PyMonitor:
       #print(event)
       if event.type == pygame.MOUSEBUTTONUP:
         if event.button == 1:
-          for i in range(len(self.surfaces)):
-            if self.insideRect(event.pos,self.surfaces[i]["pos"],self.surfaces[i]["surface"]):
-              self.activeIndex = i
-              print(f"robot {self.surfaces[self.activeIndex]['name']} is active")
           if self.activeIndex is not None:
             #prodcast goal to /ugv1/move_base_simple/goal topic
             pos = self.pixelToWorld(event.pos[0],event.pos[1],self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
@@ -352,6 +348,10 @@ class PyMonitor:
             self.surfaces[self.activeIndex]["goal"] = pos
             #prodcast goal
             self.publishGoal(self.surfaces[self.activeIndex])
+          for i in range(len(self.surfaces)):
+            if self.insideRect(event.pos,self.surfaces[i]["pos"],self.surfaces[i]["surface"]):
+              self.activeIndex = i
+              print(f"robot {self.surfaces[self.activeIndex]['name']} is active")
         if event.button == 3:
           self.activeIndex = None
         if event.button ==2:

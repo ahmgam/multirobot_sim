@@ -12,6 +12,7 @@ from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped,Point
 from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
+from watchpoints import watch
 
 #default value of state update interval
 UPDATE_INTERVAL = 10
@@ -70,7 +71,7 @@ class Planner:
         return (x,y)
 
     def gridToPos(self,grid):
-        x,y = grid
+        x,y = grid[0],grid[1]
         x = x*self.gridInfo["resolution"] + self.gridInfo["origin"][0]
         y = y*self.gridInfo["resolution"] + self.gridInfo["origin"][1]
         return (x,y)
@@ -78,12 +79,12 @@ class Planner:
     def parsePath(self,path):
         formattedPath = Path()
         formattedPath.header.frame_id = "map"
+        loginfo(f"planner: path is {path}@@@")
         for node in path:
             pose = PoseStamped()
             pose.header.frame_id = "map"
-            node = self.gridToPos(node)
-            pose.pose.position.x = node[0]
-            pose.pose.position.y = node[1]
+            pose.pose.position.x = node[0]* self.gridInfo["resolution"] + self.gridInfo["origin"][0]
+            pose.pose.position.y = node[1]*self.gridInfo["resolution"] + self.gridInfo["origin"][1]
             pose.pose.position.z = 0
             formattedPath.poses.append(pose)
         return formattedPath
@@ -176,6 +177,8 @@ class TaskAllocationManager:
         self.idle= {self.node_id:True}
         self.waiting_message = None
         self.ongoing_task = None
+        watch(self.waiting_message)
+        watch(self.ongoing_task)
         self.last_id = 1
         loginfo(f"{self.node_id}: Task_allocator: Initializing services")
         self.get_blockchain_records = ServiceProxy(f'/{self.node_id}/roschain/get_records',GetBCRecords)
@@ -282,11 +285,13 @@ class TaskAllocationManager:
             if self.is_task_completed(data['target_id']):
                 self.clear_task(data['target_id'])
 
-        if record['meta']['item_table'] == 'path':
+        if record['meta']['item_table'] == 'paths':
             data = record['data']
+            data['path_points'] = json.loads(data['path_points'])
             target_id = data['target_id']
             if target_id in self.paths.keys():
                 self.paths[target_id][data['node_id']] = data
+                
             else:
                 self.paths[target_id] = {data['node_id']:data}
                 self.records[data["id"]][data['node_id']] = data
@@ -413,11 +418,10 @@ class TaskAllocationManager:
         needed_uav = int(self.targets[target_id]['needed_uav'])
         needed_ugv = int(self.targets[target_id]['needed_ugv'])
         #get all idle robots
-        for robot in self.robots.values():
-            if self.is_robot_idle(robot['node_id']):
-                if robot['node_type'] == 'uav':
+        for path in self.paths[target_id].values():
+                if path['node_type'] == 'uav':
                     needed_uav -= 1
-                if robot['node_type'] == 'ugv':
+                if path['node_type'] == 'ugv':
                     needed_ugv -= 1
         
         if needed_uav <= 0 and needed_ugv <= 0:
@@ -465,13 +469,13 @@ class TaskAllocationManager:
         self.path_publisher.publish(self.planner.parsePath(path))
         
     def check_conflict(self,target_id):
-        all_paths = self.paths[target_id].values()
+        all_paths = list(self.paths[target_id].values())
         conflicted_paths = []
         while len(all_paths) > 0:
             first_path = all_paths[0]
             for i in range(1,len(all_paths)):
                 if self.are_paths_intersection(first_path["path_points"],all_paths[i]["path_points"]):
-                    conflicted_paths.append((first_path["commit_id"],all_paths[i]["commit_id"]))
+                    conflicted_paths.append((first_path["node_id"],all_paths[i]["node_id"]))
                     
             all_paths.remove(first_path)
         return conflicted_paths
@@ -502,6 +506,8 @@ class TaskAllocationManager:
         #check if message is in waiting
         if msg_type == "task_records":
             loginfo(f"{self.node_id}: Task_allocator: Waiting : {self.waiting_message} andn got {message} for task_records mf@@@")
+        if msg_type == 'paths':
+            loginfo(f"{self.node_id}: Task_allocator: Waiting : {self.waiting_message} andn got {message} for paths mf@@@")
         if message!= None and msg_type != None:
             if message.get('id') != None:
                 message.pop('id')
@@ -533,7 +539,7 @@ class TaskAllocationManager:
 
     def is_path_submitted(self,target_id):
         if self.paths[target_id].get(self.node_id) != None:
-            return True,self.path[target_id][self.node_id]["path_points"]
+            return True,self.paths[target_id][self.node_id]["path_points"]
         return False,None
     
     def calculate_path_legnth(self,points):
@@ -542,16 +548,18 @@ class TaskAllocationManager:
             length += self.caluculate_distance(points[i],points[i+1])
         return length
 
-    def submit_path(self,target_id,path):
+    def submit_path(self,target_id,path,path_type='initial'):
         #prepare payload
         payload = {
             'node_id':self.node_id,
             'target_id':target_id,
             'node_type': self.node_type,
+            'path_type': path_type,
             'path_points':json.dumps(path),
             'pos_x': self.targets[target_id]['pos_x'],
             'pos_y': self.targets[target_id]['pos_y'],
-            'distance':self.calculate_path_legnth(path)
+            'distance':self.calculate_path_legnth(path),
+            'timecreated':datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         self.add_waiting_message(payload,'paths')
         self.submit_message(table_name='paths',message=json.dumps(payload))
@@ -624,7 +632,7 @@ class TaskAllocationManager:
             if self.is_in_waiting(
                 {'node_id':self.node_id,
                  'target_id':record['target_id']},
-                 'path'):
+                 'paths'):
                 return
             
             #plan a path for the target and submit it to waiting list
@@ -643,10 +651,11 @@ class TaskAllocationManager:
         
         loginfo(f"{self.node_id}: Task_allocator: Task is executable@@@")
         #check if there any conflicts
-        conflicted_ids = self.check_conflict(record['target_id'])
-
+        #conflicted_ids = self.check_conflict(record['target_id'])
+        conflicted_ids = []
         if len (conflicted_ids) == 0:
             #allocate robots to target
+            
             self.visualize_path(path)
             self.start_task(path)
             return
@@ -656,7 +665,7 @@ class TaskAllocationManager:
         #if found conflict, check if I need to plan path again
         is_conflicted = False
         for conf in conflicted_ids:
-            if record["id"] in conf:
+            if self.node_id in conf:
                 is_conflicted = True
                 break
         
@@ -664,7 +673,7 @@ class TaskAllocationManager:
             path = self.plan_path(record['target_id'],True)
             if path == None:
                 return
-            self.submit_path(record['target_id'],record['id'],path)
+            self.submit_path(record['target_id'],path,'replan')
 
 
 
