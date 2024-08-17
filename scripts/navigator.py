@@ -27,7 +27,7 @@ class Tracker :
     def setPath(self,path):
         self.path = path
         self.lastFoundIndex = 0
-        self.goal = self.path.poses[self.lastFoundIndex].pose.position.x,self.path.poses[self.lastFoundIndex].pose.position.y
+        self.goal = self.path[self.lastFoundIndex].x,self.path[self.lastFoundIndex].y
     
     def getDistance(self,pose1,pose2):
         return sqrt((pose1[0]-pose2[0])**2 + (pose1[1]-pose2[1])**2)
@@ -39,19 +39,19 @@ class Tracker :
 
     def update (self, currentPos) :
 
-        rospy.loginfo("last found index : {} of {} which is {}".format(self.lastFoundIndex,len(self.path.poses),(self.path.poses[self.lastFoundIndex].pose.position.x,self.path.poses[self.lastFoundIndex].pose.position.y)))
+        rospy.loginfo("last found index : {} of {} which is {}".format(self.lastFoundIndex,len(self.path),(self.path[self.lastFoundIndex].x,self.path[self.lastFoundIndex].y)))
         # extract currentX and currentY
         currentX = currentPos[0]
         currentY = currentPos[1]
 
         # use for loop to search intersections
-        for i in range (self.lastFoundIndex, len(self.path.poses)-1):
+        for i in range (self.lastFoundIndex, len(self.path)-1):
 
             # beginning of line-circle intersection code
-            x1 = self.path.poses[i].pose.position.x - currentX
-            y1 = self.path.poses[i].pose.position.y - currentY
-            x2 = self.path.poses[i+1].pose.position.x - currentX
-            y2 = self.path.poses[i+1].pose.position.y - currentY
+            x1 = self.path[i].x - currentX
+            y1 = self.path[i].y - currentY
+            x2 = self.path[i+1].x - currentX
+            y2 = self.path[i+1].y - currentY
             dx = x2 - x1
             dy = y2 - y1
             dr = sqrt (dx**2 + dy**2)
@@ -68,15 +68,15 @@ class Tracker :
                 sol_pt2 = [sol_x2 + currentX, sol_y2 + currentY]
                 # end of line-circle intersection code
 
-                minX = min(self.path.poses[i].pose.position.x, self.path.poses[i+1].pose.position.x)
-                minY = min(self.path.poses[i].pose.position.y, self.path.poses[i+1].pose.position.y)
-                maxX = max(self.path.poses[i].pose.position.x, self.path.poses[i+1].pose.position.x)
-                maxY = max(self.path.poses[i].pose.position.y, self.path.poses[i+1].pose.position.y)
+                minX = min(self.path[i].x, self.path[i+1].x)
+                minY = min(self.path[i].y, self.path[i+1].y)
+                maxX = max(self.path[i].x, self.path[i+1].x)
+                maxY = max(self.path[i].y, self.path[i+1].y)
 
                 # if one or both of the solutions are in range
                 if ((minX <= sol_pt1[0] <= maxX) and (minY <= sol_pt1[1] <= maxY)) or ((minX <= sol_pt2[0] <= maxX) and (minY <= sol_pt2[1] <= maxY)):
 
-                    nextPoint = [self.path.poses[i+1].pose.position.x,self.path.poses[i+1].pose.position.y]
+                    nextPoint = [self.path[i+1].x,self.path[i+1].y]
                     # if both solutions are in range, check which one is better
                     if ((minX <= sol_pt1[0] <= maxX) and (minY <= sol_pt1[1] <= maxY)) and ((minX <= sol_pt2[0] <= maxX) and (minY <= sol_pt2[1] <= maxY)):
                         # make the decision by compare the distance between the intersections and the next point in self.path.poses
@@ -106,45 +106,45 @@ class Tracker :
                 else:
                     # no new intersection found, potentially deviated from the self.path.poses
                     # follow self.path.poses[self.lastFoundIndex]
-                    self.goal = [self.path.poses[self.lastFoundIndex].pose.position.x, self.path.poses[self.lastFoundIndex].pose.position.y]
+                    self.goal = [self.path[self.lastFoundIndex].x, self.path[self.lastFoundIndex].y]
 
             # if determinant < 0
             else:
                 # no new intersection found, potentially deviated from the self.path.poses
                 # follow self.path.poses[self.lastFoundIndex]
-                self.goal = [self.path.poses[self.lastFoundIndex].pose.position.x, self.path.poses[self.lastFoundIndex].pose.position.y]
+                self.goal = [self.path[self.lastFoundIndex].x, self.path[self.lastFoundIndex].y]
 
 
 class Navigator:
-    def __init__(self,odom_topic,goal_topic,path_topic):
+    def __init__(self,node_id,odom_topic,goal_topic,path_topic):
+        self.node_id = node_id
         self.goal_topic=goal_topic
-        self.target = None
         self.path_topic=path_topic
         self.odom_topic=odom_topic
         self.position = None
         #initialize node
-        rospy.loginfo("navigator:Initializing node")
+        rospy.loginfo(f"{self.node_id}: navigator:Initializing node")
         rospy.init_node('navigator', anonymous=True)
 
         try:
-            rospy.loginfo("navigator:Creating cmd publisher")
+            rospy.loginfo(f"{self.node_id}: navigator:Creating cmd publisher")
             self.goalPublisher = rospy.Publisher(self.goal_topic,PoseStamped, queue_size=10)
         except rospy.ROSInterruptException:
-            raise rospy.ROSInterruptException("navigator:Error creating cmd subscriber")
+            raise rospy.ROSInterruptException("{controller.node_id}: navigator:Error creating cmd subscriber")
 
         try:
-            rospy.loginfo("navigator:Creating path publisher")
+            rospy.loginfo(f"{self.node_id}: navigator:Creating path publisher")
             self.pathPublisher = rospy.Publisher(self.path_topic, Path, queue_size=10)
         except rospy.ROSInterruptException:
             raise rospy.ROSInterruptException("navigator:Error creating path publisher")
         
         try :
-            rospy.loginfo("navigator:Getting map")
+            rospy.loginfo(f"{self.node_id}: navigator:Getting map")
             self.map = self.getTheMap()
         except rospy.service.ServiceException:
-            raise rospy.service.ServiceException("navigator:Error getting map")
+            raise rospy.service.ServiceException(f"{controller.node_id}: navigator:Error getting map")
         #get initial position
-        rospy.loginfo("navigator:Getting initial position")
+        rospy.loginfo(f"{self.node_id}: navigator:Getting initial position")
         odom = self.getOdomMsg()
         self.tracker = Tracker()
         self.goal = None
@@ -155,20 +155,22 @@ class Navigator:
 
     @staticmethod    
     def execute(path,controller):
-    
+        path = path.points
+        rospy.loginfo(f"{controller.node_id}: navigator:Received new path")
         controller.tracker.flush()
         controller.tracker.setPath(path)
+        controller.goal = controller.tracker.goal
         controller.navigate()
         controller.actionServer.set_succeeded()
         controller.actionServer.publish_result(True)
         
 
     def feedback(self,goal,controller):
-        f = controller.tracker.lastFoundIndex / len(controller.tracker.path.poses) * 100
+        f = controller.tracker.lastFoundIndex / len(controller.tracker.path) * 100
         self.actionServer.publish_feedback(f)
     def getTheMap(self,mapService='/static_map'):
         #wait for map service
-        rospy.loginfo("navigator:Waiting for map service")
+        rospy.loginfo(f"{self.node_id}: navigator:Waiting for map service")
         serv = rospy.ServiceProxy(mapService, GetMap)
         serv.wait_for_service()
         map = serv().map
@@ -199,32 +201,52 @@ class Navigator:
     def updatePosition(self,odom_msg):
         self.position = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
     
-        
+    def parsePath(self,path):
+        formattedPath = Path()
+        formattedPath.header.frame_id = "map"
+        for node in path:
+            pose = PoseStamped()
+            pose.header.frame_id = "map"
+            pose.pose.position.x = node.x
+            pose.pose.position.y = node.y
+            pose.pose.position.z = 0
+            formattedPath.poses.append(pose)
+        return formattedPath
+    
+    def publishPath(self,path):
+        path = self.parsePath(path)
+        self.pathPublisher.publish(path)
 
     def navigate(self):
         lastGoal = None
-        while not self.is_reached(odom_msg, self.target):
+        odom_msg = self.getOdomMsg()
+        while not self.is_reached(odom_msg, self.goal):
             odom_msg = self.getOdomMsg()
             self.updatePosition(odom_msg)
             #update tracker
             self.tracker.update(self.position)
             self.goal = self.tracker.goal
             #publish path
-            self.pathPublisher.publish(self.tracker.path)
+            self.publishPath(self.tracker.path)
             #publish goal
             if self.goal != lastGoal:
                 self.goalPublisher.publish(PoseStamped(pose=Pose(position=Point(x=self.goal[0],y=self.goal[1]))))
                 lastGoal = self.goal
             self.rate.sleep()
-        rospy.loginfo("navigator:Reached goal, setting new goal")                 
+        rospy.loginfo(f"{controller.node_id}: navigator:Reached goal, setting new goal")                 
         self.goal = None
-        self.target = None
         self.tracker.flush()
 
 if __name__ == '__main__':
     #getting arguments
     ns = rospy.get_namespace()
+    try :
+        node_id= rospy.get_param(f'{ns}/navigator/node_id') # node_name/argsname
+        rospy.loginfo("navigator:Getting node_id argument, and got : ", node_id)
 
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_id")
+    
     try :
         odom_topic= rospy.get_param(f'{ns}/navigator/odom_topic') # node_name/argsname
         rospy.loginfo("navigator:Getting robot argument, and got : ", odom_topic)
@@ -247,5 +269,5 @@ if __name__ == '__main__':
         raise rospy.ROSInterruptException("Invalid arguments : goal_topic")
 
     #initialize node
-    controller = Navigator(odom_topic,goal_topic,path_topic)
+    controller = Navigator(node_id,odom_topic,goal_topic,path_topic)
     rospy.spin()

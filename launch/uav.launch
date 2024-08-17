@@ -43,7 +43,7 @@
         </node>
 
         <node name="navigator" pkg="multirobot_sim" type="navigator.py" output="screen">
-            <param name="model_name" value="$(arg node_id)"/>
+            <param name="node_id" value="$(arg node_id)"/>
             <param name="odom_topic" value="/$(arg node_id)/odometry_sensor1/odometry"/>
             <param name="goal_topic" value="goal"/>
             <param name="path_topic" value="path"/>

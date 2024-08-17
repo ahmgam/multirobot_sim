@@ -12,7 +12,6 @@ from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped,Point
 from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
-from watchpoints import watch
 
 #default value of state update interval
 UPDATE_INTERVAL = 10
@@ -177,8 +176,6 @@ class TaskAllocationManager:
         self.idle= {self.node_id:True}
         self.waiting_message = None
         self.ongoing_task = None
-        watch(self.waiting_message)
-        watch(self.ongoing_task)
         self.last_id = 1
         loginfo(f"{self.node_id}: Task_allocator: Initializing services")
         self.get_blockchain_records = ServiceProxy(f'/{self.node_id}/roschain/get_records',GetBCRecords)
@@ -192,7 +189,7 @@ class TaskAllocationManager:
         loginfo(f"{self.node_id}: Task_allocator: Initializing submit_message service client")
         self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
         loginfo(f"{self.node_id}: Task_allocator: Initializing add_goal service")
-        self.navigation_client = SimpleActionClient(f'{self.node_id}/navigation',NavigationActionAction)
+        self.navigation_client = SimpleActionClient('navigator',NavigationActionAction)
         loginfo(f"{self.node_id}: Task_allocator: Initializing navigation action client")
         self.planner = Planner(self.odom_topic,planningAlgorithm)
         self.last_state = datetime.now()
@@ -656,8 +653,9 @@ class TaskAllocationManager:
         if len (conflicted_ids) == 0:
             #allocate robots to target
             
-            self.visualize_path(path)
+            #self.visualize_path(path)
             self.start_task(path)
+            self.ongoing_task = record['target_id']
             return
         
         loginfo(f"{self.node_id}: Task_allocator: Conflict detected@@@")
@@ -675,6 +673,7 @@ class TaskAllocationManager:
                 return
             self.submit_path(record['target_id'],path,'replan')
 
+        
 
 
 if __name__ == "__main__":
