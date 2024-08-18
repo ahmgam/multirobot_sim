@@ -70,7 +70,7 @@ class Repeater:
             self.publisher.publish(self.goalPose)
 
     def publishPath(self):
-        path = self.getTwoPointPath(self.goalPose.position.x,self.goalPose.position.y,self.goalPose.position.z)
+        path = self.getTwoPointPath(self.goalPose.pose.position.x,self.goalPose.pose.position.y,self.goalPose.pose.position.z)
         self.pathPublisher.publish(path)
 
     def loop(self):

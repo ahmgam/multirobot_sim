@@ -180,7 +180,6 @@ class SimpleController:
             #difference_angle = goal_angle-heading_angle 
             rospy.loginfo("difference_angle: "+str(difference_angle))
             rospy.loginfo("goal : "+str(self.goal[0])+","+str(self.goal[1]))
-            rospy.loginfo("target : "+str(self.target.x)+","+str(self.target.y))
             rospy.loginfo("position : "+str(self.position[0])+","+str(self.position[1]))
             #get distance to goal
             distance = self.getDistance(odom_msg,self.goal)

@@ -350,14 +350,8 @@ class TaskAllocationManager:
 
     def clear_task(self,task_id):
         #get task
-        task = self.tasks[task_id]
-        #get all commit ids 
-        record_ids = task.keys()
-        for record_id in record_ids:
-            target_id = task[record_id]['target_id']
-            if target_id in self.targets.keys():
-                del self.targets[target_id]
-            del self.records[record_id]
+        del self.tasks[task_id]
+        del self.targets[task_id]
         del self.tasks[task_id]
         del self.paths[task_id]
 
@@ -518,7 +512,7 @@ class TaskAllocationManager:
         payload = {
             'node_id':self.node_id,
             'record_type':'complete',
-            'target_id':self.ongoing_task['target_id'],
+            'target_id':self.ongoing_task,
             'timecreated':datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         self.add_waiting_message(payload,'task_records')

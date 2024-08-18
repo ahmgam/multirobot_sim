@@ -8,7 +8,7 @@ from geometry_msgs.msg import PoseStamped,Point,Pose
 from geometry_msgs.msg import Twist
 from actionlib import SimpleActionServer
 from nav_msgs.msg import Path
-from multirobot_sim.msg import NavigationActionAction
+from multirobot_sim.msg import NavigationActionAction,NavigationActionActionFeedback,NavigationActionActionResult
 goal = None
 
 WHEEL_DIAMETER = 0.066
@@ -161,8 +161,9 @@ class Navigator:
         controller.tracker.setPath(path)
         controller.goal = controller.tracker.goal
         controller.navigate()
-        controller.actionServer.set_succeeded()
-        controller.actionServer.publish_result(True)
+        m = NavigationActionActionResult()
+        m.result.success = True
+        controller.actionServer.set_succeeded(m.result)
         
 
     def feedback(self,goal,controller):
@@ -180,7 +181,10 @@ class Navigator:
         odom = rospy.wait_for_message(self.odom_topic, Odometry)
         return odom
 
-
+    def feedback(self):
+        f = NavigationActionActionFeedback()
+        f.feedback.percentComplete = self.tracker.lastFoundIndex / len(self.tracker.path) * 100
+        self.actionServer.publish_feedback(f)
         
     def getDistance(self,odom_msg,goal):
         p1 = (odom_msg.pose.pose.position.x,odom_msg.pose.pose.position.y)
@@ -228,6 +232,8 @@ class Navigator:
             self.goal = self.tracker.goal
             #publish path
             self.publishPath(self.tracker.path)
+            #publish feedback
+            #self.feedback()
             #publish goal
             if self.goal != lastGoal:
                 self.goalPublisher.publish(PoseStamped(pose=Pose(position=Point(x=self.goal[0],y=self.goal[1]))))
