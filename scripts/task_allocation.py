@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from multirobot_sim.srv import GetBCRecords,SubmitTransaction,AddGoal,GetBCRecordsRequest,SubmitTransactionRequest,AddGoalResponse
-from rospy import ServiceProxy,Service,Publisher, loginfo, wait_for_message,init_node,get_namespace, get_param,ROSInterruptException, is_shutdown
+from rospy import ServiceProxy,Service,Publisher,Subscriber, loginfo, wait_for_message,init_node,get_namespace, get_param,ROSInterruptException, is_shutdown
 import json
 from actionlib import SimpleActionClient,GoalStatus
 from datetime import datetime
@@ -12,7 +12,8 @@ from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped,Point
 from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
-
+from std_msgs.msg import String
+from time import mktime
 #default value of state update interval
 UPDATE_INTERVAL = 10
 class Planner:
@@ -196,7 +197,20 @@ class TaskAllocationManager:
         self.path_publisher = Publisher(f'/{self.node_id}/path',Path,queue_size=1)
         loginfo(f"{self.node_id}: Task_allocator: Initializing path publisher")
         #self.get_blockchain_records = ServiceProxy('get_blockchain_records')
-    
+        self.log_publisher = Publisher(f"/{self.node_id}/connector/send_log", String, queue_size=10)
+        #define goal found subscriber
+        self.goal_found = Subscriber(f"/{self.node_id}/goal_found",String,self.add_goal)
+
+    def goal_found_callback(self,data):
+        data = data.data
+        splitted = data.split(",")
+        if len(splitted) != 4:
+            loginfo(f"{self.node_id}: Task_allocator: Invalid goal found message, it should be in the format x,y,needed_uavs,needed_ugvs")
+            return
+        x,y,needed_uavs,needed_ugvs = float(splitted[0]),float(splitted[1]),int(splitted[2]),int(splitted[3])
+        self.add_goal(x,y,needed_uavs,needed_ugvs)
+        self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:publishing,target")
+        
     def getParameters(self):
         loginfo(f"task_allocator: getting namespace")
         ns = get_namespace()
@@ -230,20 +244,18 @@ class TaskAllocationManager:
             raise ROSInterruptException("Invalid arguments : update_interval")
         
         return node_id,node_type,odom_topic,update_interval
-    def add_goal(self,data):
-        payload = {
-            'node_id':self.node_id,
-            'pos_x':data.x,
-            'pos_y':data.y,
-            'needed_uav':data.needed_uav,
-            'needed_ugv':data.needed_ugv,
-            'timecreated':datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        self.submit_message(SubmitTransactionRequest(
-            'targets',
-            json.dumps(payload)
-        ))
-        return AddGoalResponse(True)
+    def add_goal(self,x,y,needed_uavs,needed_ugvs):
+        msg = json.dumps(
+        {
+          "node_id":self.node_id,
+          "timecreated":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+          "pos_x":x,
+          "pos_y":y,
+          "needed_uav":needed_uavs,
+          "needed_ugv":needed_ugvs
+          
+        })
+        self.submit_message('targets',msg)
     def update_position(self):
         odom = wait_for_message(self.odom_topic, Odometry)
         self.pos_x = odom.pose.pose.position.x
@@ -267,6 +279,7 @@ class TaskAllocationManager:
             self.targets[record['data']['id']] = record['data']
             self.tasks[record['data']['id']]= []
             self.paths[record['data']['id']] = {}
+            self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:received,{data['node_id']},target,{record['data']['id']}")
         if record['meta']['item_table'] == 'task_records':
             data = record['data']
             print(f"task record is {data} and ")
@@ -278,6 +291,7 @@ class TaskAllocationManager:
                 self.tasks[data['target_id']].append(data)
             else:
                 self.tasks[data['target_id']] = [data]
+            self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:received,{data['node_id']},{data['record_type']},{data['target_id']}")
             self.records[data['id']] = data
             if self.is_task_completed(data['target_id']):
                 self.clear_task(data['target_id'])
@@ -292,6 +306,7 @@ class TaskAllocationManager:
             else:
                 self.paths[target_id] = {data['node_id']:data}
                 self.records[data["id"]][data['node_id']] = data
+            self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:received,{data['node_id']},path,{data['target_id']}")
         self.last_id = record['meta']['id']
         if self.is_in_waiting(record['data'],record['meta']['item_table']):
                 self.waiting_message = None
@@ -438,6 +453,7 @@ class TaskAllocationManager:
         }
         self.add_waiting_message(payload,'task_records')
         self.submit_message('task_records',json.dumps(payload))
+        self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:publishing,commit,{str(target)}")
 
     def add_waiting_message(self,message,msg_type):
         self.waiting_message = {
@@ -518,6 +534,7 @@ class TaskAllocationManager:
         self.add_waiting_message(payload,'task_records')
         #msg = SubmitTransaction(table_name='task_records',message=json.dumps(payload))
         self.submit_message('task_records',json.dumps(payload))
+        self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:publishing,complete,{self.ongoing_task}")
     def check_ongoing_task(self):
         #check the status of ongoing task
         if self.navigation_client.get_state() == GoalStatus.SUCCEEDED:
@@ -554,6 +571,7 @@ class TaskAllocationManager:
         }
         self.add_waiting_message(payload,'paths')
         self.submit_message(table_name='paths',message=json.dumps(payload))
+        self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.datetime.now().timetuple())}:publishing,path,{target_id}")
     def plan_path(self,target_id,avoid_conflicts= False):
         self.planner.setGoal(x=self.targets[target_id]['pos_x'],y=self.targets[target_id]['pos_y'],z=0)
         self.planner.plan()

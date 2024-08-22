@@ -581,7 +581,7 @@ class Blockchain:
         #sending log info 
         time_now = mktime(datetime.datetime.now().timetuple())
         log_msg = f"{time_now},block,{last_block_id+1}"
-        self.log_publisher.publish(log_msg)
+        #self.log_publisher.publish(log_msg)
         
         #add the transaction to the blockchain
         self.db.insert("block",("tx_start_id",start_tx),("tx_end_id",end_tx),("merkle_root",root),("combined_hash",combined_hash),("timecreated",datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
@@ -598,7 +598,7 @@ class Blockchain:
         start_time = msg["start_time"]
         msg = msg["data"]
         log_msg = f"{mktime(datetime.datetime.now().timetuple())},transaction,{msg['msg_id']},{msg['time']},{start_time}"
-        self.log_publisher.publish(log_msg)
+        #self.log_publisher.publish(log_msg)
         self.buffer.put(msg,msg["time"],hash)
         
         if self.buffer.count() > self.block_size+ len(self.make_function_call(self.sessions,"get_active_nodes"))* self.tolerance:
