@@ -148,6 +148,7 @@ class Navigator:
         odom = self.getOdomMsg()
         self.tracker = Tracker()
         self.goal = None
+        self.target = None
         self.rate = rospy.Rate(20) # 10hz
 
         #define action server
@@ -160,6 +161,7 @@ class Navigator:
         controller.tracker.flush()
         controller.tracker.setPath(path)
         controller.goal = controller.tracker.goal
+        controller.target = (path[-1].x,path[-1].y)
         controller.navigate()
         m = NavigationActionActionResult()
         m.result.success = True
@@ -224,8 +226,9 @@ class Navigator:
     def navigate(self):
         lastGoal = None
         odom_msg = self.getOdomMsg()
-        while not self.is_reached(odom_msg, self.goal):
+        while not self.is_reached(odom_msg, self.target):
             odom_msg = self.getOdomMsg()
+            rospy.loginfo(f"{controller.node_id}: navigator:odom received: {odom_msg.pose.pose.position.x},{odom_msg.pose.pose.position.y}")
             self.updatePosition(odom_msg)
             #update tracker
             self.tracker.update(self.position)
@@ -241,6 +244,7 @@ class Navigator:
             self.rate.sleep()
         rospy.loginfo(f"{controller.node_id}: navigator:Reached goal, setting new goal")                 
         self.goal = None
+        self.target = None
         self.tracker.flush()
 
 if __name__ == '__main__':

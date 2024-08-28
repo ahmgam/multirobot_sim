@@ -507,9 +507,7 @@ class RTT:
         self.tree = []
         self.grid = None
         self.info = None
-        self.xMax = gridInfo['width']
-        self.yMax = gridInfo['height']
-        self.maxDist = np.sqrt(self.xMax**2 + self.yMax**2)
+        
         self.verts = []
         self.path = []
         self.incDist = incDist
@@ -525,6 +523,9 @@ class RTT:
     def setMap(self, grid,info):
         self.grid = grid
         self.info = info
+        self.xMax = info['width']
+        self.yMax = info['height']
+        self.maxDist = np.sqrt(self.xMax**2 + self.yMax**2)
     def flush(self):
         self.tree = [self.start]
         self.verts = []

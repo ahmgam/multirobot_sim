@@ -30,7 +30,7 @@ class Planner:
         loginfo(f"planner:Grid formatted, shape is {self.grid.shape}")
         self.gridInfo = self.formatGridInfo(self.map.info)
         loginfo(f"planner:Grid info formatted, info is {self.gridInfo}")
-        self.algorithm = self.defineAlgorithm(algorithm)
+        self.algorithm = self.defineAlgorithm(algorithm)            
         loginfo(f"planner:Algorithm defined, algorithm is {type(self.algorithm)}")
 
     def getTheMap(self,mapService='/static_map'):
@@ -48,9 +48,9 @@ class Planner:
         if algorithm is None:
             return None
         if algorithm == "AStar":
-            return AStar(self.grid,self.gridInfo)
+            return AStar()
         if algorithm == "RTT":
-            return RTT(self.grid,self.gridInfo)
+            return RTT()
 
     def formatGrid(self,grid):
         #convert grid to 2d array
@@ -146,7 +146,7 @@ class Planner:
             self.algorithm.setGoal(self.posToGrid(self.goal))
             loginfo(f"planner:Goal set to {self.algorithm.goal}")
             if other_paths is None:
-                self.algorithm.setMap(self.map,self.gridInfo)
+                self.algorithm.setMap(self.grid,self.gridInfo)
                 self.algorithm.plan()
             else:
                 self.mergePathsWithMap(other_paths)
@@ -154,7 +154,7 @@ class Planner:
                 self.algorithm.plan()
                 self.clearModifiedMap()
             
-            self.path = self.algorithm.path
+            self.path =self.parsePath(self.algorithm.path)
 
     def setGoal(self, x, y,z):
         self.goal = (x, y,z)
@@ -365,10 +365,13 @@ class TaskAllocationManager:
 
     def clear_task(self,task_id):
         #get task
-        del self.tasks[task_id]
-        del self.targets[task_id]
-        del self.tasks[task_id]
-        del self.paths[task_id]
+        if task_id in self.tasks.keys():
+            del self.tasks[task_id] 
+        if task_id in self.targets.keys():
+            del self.targets[task_id]
+        if task_id in self.paths.keys():
+            del self.paths[task_id]
+
 
     def get_target_best_candidates(self,target_id):
         #get task details 
@@ -464,16 +467,23 @@ class TaskAllocationManager:
     def format_path(self,path):
         #convert path from list of tuples to list of points
         points = []
-        for point in path:
-            points.append(Point(point[0],point[1],0))
+        for point in path.poses:
+            points.append([point.pose.position.x,point.pose.position.y])
         return points
     
     def start_task(self,path):
-        goal = NavigationActionGoal(points=self.format_path(path))
+        points = []
+        for point in path:
+            p = Point()
+            p.x = point[0]
+            p.y = point[1]
+            p.z = 0
+            points.append(p)    
+        goal = NavigationActionGoal(points=points)
         self.navigation_client.send_goal(goal)
 
     def visualize_path(self,path):
-        self.path_publisher.publish(self.planner.parsePath(path))
+        self.path_publisher.publish(path)
         
     def check_conflict(self,target_id):
         all_paths = list(self.paths[target_id].values())
@@ -552,8 +562,11 @@ class TaskAllocationManager:
     
     def calculate_path_legnth(self,points):
         length = 0
-        for i in range(len(points)-1):
-            length += self.caluculate_distance(points[i],points[i+1])
+        for i in range(len(points.poses)-1):
+            length += self.caluculate_distance(
+                (points.poses[i].pose.position.x,points.poses[i].pose.position.y),
+                (points.poses[i+1].pose.position.x,points.poses[i+1].pose.position.y)
+                )
         return length
 
     def submit_path(self,target_id,path,path_type='initial'):
@@ -563,7 +576,7 @@ class TaskAllocationManager:
             'target_id':target_id,
             'node_type': self.node_type,
             'path_type': path_type,
-            'path_points':json.dumps(path),
+            'path_points':json.dumps(self.format_path(path)),
             'pos_x': self.targets[target_id]['pos_x'],
             'pos_y': self.targets[target_id]['pos_y'],
             'distance':self.calculate_path_legnth(path),
@@ -692,6 +705,6 @@ if __name__ == "__main__":
     
 
     loginfo("task_allocator:Starting the task allocation node")
-    robot = TaskAllocationManager()
+    robot = TaskAllocationManager(planningAlgorithm="AStar")
     while not is_shutdown():
         robot.loop()
