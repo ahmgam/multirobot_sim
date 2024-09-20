@@ -14,6 +14,7 @@ from nav_msgs.srv import GetMap
 from path_planning import AStar,RTT
 from std_msgs.msg import String
 from time import mktime
+import uuid
 #default value of state update interval
 UPDATE_INTERVAL = 10
 class Planner:
@@ -170,7 +171,7 @@ class TaskAllocationManager:
         self.robots = {}
         self.targets = {}
         self.tasks = {}
-        self.records= {}
+        self.buffered_hashes = []
         self.paths = {}
         self.pos_x = None
         self.pos_y = None
@@ -208,7 +209,8 @@ class TaskAllocationManager:
             loginfo(f"{self.node_id}: Task_allocator: Invalid goal found message, it should be in the format x,y,needed_uavs,needed_ugvs")
             return
         x,y,needed_uavs,needed_ugvs = float(splitted[0]),float(splitted[1]),int(splitted[2]),int(splitted[3])
-        self.add_goal(x,y,needed_uavs,needed_ugvs)
+        goal_uuid = str(uuid.uuid4())
+        self.add_goal(x,y,needed_uavs,needed_ugvs,goal_uuid)
         self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:publishing,target")
         
     def getParameters(self):
@@ -244,10 +246,11 @@ class TaskAllocationManager:
             raise ROSInterruptException("Invalid arguments : update_interval")
         
         return node_id,node_type,odom_topic,update_interval
-    def add_goal(self,x,y,needed_uavs,needed_ugvs):
+    def add_goal(self,x,y,needed_uavs,needed_ugvs,uuid):
         msg = json.dumps(
         {
           "node_id":self.node_id,
+          "uuid":uuid,
           "timecreated":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
           "pos_x":x,
           "pos_y":y,
@@ -268,18 +271,18 @@ class TaskAllocationManager:
             record = json.loads(record)
             #record = list(record.values())[0]
             self.process_record(record)
-            
-    def process_record(self,record):
+         
+    def handle_record(self,record):
         loginfo(f"{self.node_id}: Task_allocator: Processing record of type {record['meta']['item_table']}")
         if record['data']['node_id'] not in self.idle.keys():
                 self.idle[record['data']['node_id']] = True
         if record['meta']['item_table'] == 'states':
             self.robots[record['data']['node_id']] = record['data']
         if record['meta']['item_table'] == 'targets':
-            self.targets[record['data']['id']] = record['data']
-            self.tasks[record['data']['id']]= []
-            self.paths[record['data']['id']] = {}
-            self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:received,{record['data']['node_id']},target,{record['data']['id']}")
+            self.targets[record['data']['uuid']] = record['data']
+            self.tasks[record['data']['uuid']]= []
+            self.paths[record['data']['uuid']] = {}
+            self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:received,{record['data']['node_id']},target,{record['data']['uuid']}")
         if record['meta']['item_table'] == 'task_records':
             data = record['data']
             print(f"task record is {data} and ")
@@ -292,7 +295,6 @@ class TaskAllocationManager:
             else:
                 self.tasks[data['target_id']] = [data]
             self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:received,{data['node_id']},{data['record_type']},{data['target_id']}")
-            self.records[data['id']] = data
             if self.is_task_completed(data['target_id']):
                 self.clear_task(data['target_id'])
 
@@ -305,14 +307,21 @@ class TaskAllocationManager:
                 
             else:
                 self.paths[target_id] = {data['node_id']:data}
-                self.records[data["id"]][data['node_id']] = data
             self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:received,{data['node_id']},path,{data['target_id']}")
-        self.last_id = record['meta']['id']
-        if self.is_in_waiting(record['data'],record['meta']['item_table']):
-                self.waiting_message = None
-        #update last id 
-        if self.last_id <= record['meta']['id']:
+    def process_record(self,record):
+        if record['committed'] == False:
+            if record['meta']['hash'] not in self.buffered_hashes:
+                self.buffered_hashes.append(record['meta']['hash'])
+                self.handle_record(record)
+        else:
+            if record['meta']['hash'] in self.buffered_hashes:
+                self.buffered_hashes.remove(record['meta']['hash'])
+            else:
+                self.handle_record(record)
+            #update last id 
             self.last_id = record['meta']['id'] + 1
+        if self.is_in_waiting(record['data'],record['meta']['item_table']):
+            self.waiting_message = None
 
     def is_task_fully_committed(self,task_id):
         #check all records in task
@@ -411,7 +420,7 @@ class TaskAllocationManager:
             for robot in robots:
                 if robot['node_id'] == self.node_id :
                     best_targets.append({
-                        "target_id":target['id'],
+                        "target_id":target['uuid'],
                         "node_id":robot['node_id'],
                         "distance":robot['distance']
                     })
@@ -450,7 +459,7 @@ class TaskAllocationManager:
         #prepare payload
         payload = {
             'node_id':self.node_id,
-            'target_id':int(target),
+            'target_id':str(target),
             'record_type':'commit',
             'timecreated':datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -677,7 +686,7 @@ class TaskAllocationManager:
         conflicted_ids = []
         if len (conflicted_ids) == 0:
             #allocate robots to target
-            
+            self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:published,{self.node_id},started,{record['target_id']}")
             #self.visualize_path(path)
             self.start_task(path)
             self.ongoing_task = record['target_id']

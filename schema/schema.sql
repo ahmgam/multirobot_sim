@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS states (
 );
 CREATE TABLE IF NOT EXISTS targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid TEXT NOT NULL,
     node_id TEXT NOT NULL,
     timecreated TEXT NOT NULL,
     pos_x REAL NOT NULL,
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS task_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     node_id TEXT NOT NULL,
     record_type TEXT NOT NULL,
-    target_id INTEGER NOT NULL,
+    target_id TEXT NOT NULL,
     timecreated TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS paths (
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS paths (
     pos_x REAL NOT NULL,
     pos_y REAL NOT NULL,
     path_type TEXT NOT NULL,
-    target_id INTEGER NOT NULL,
+    target_id TEXT NOT NULL,
     path_points TEXT NOT NULL,
     distance REAL NOT NULL,
     timecreated TEXT NOT NULL

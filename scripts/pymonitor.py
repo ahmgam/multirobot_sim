@@ -2,6 +2,7 @@
 from math import ceil
 import rospy
 from nav_msgs.srv import GetMap
+from std_msgs.msg import String
 from gazebo_msgs.srv import GetModelState
 from tf.transformations import euler_from_quaternion
 import numpy as np
@@ -13,6 +14,7 @@ from multirobot_sim.srv import AddGoal,AddGoalRequest
 from multirobot_sim.srv import SubmitTransaction,SubmitTransactionRequest
 import json
 from datetime import datetime
+import uuid
 # define the default robots sizes in meters
 ROBOT_SIZE_UAV = 0.5
 ROBOT_SIZE_UGV = 0.5
@@ -173,6 +175,7 @@ class PyMonitor:
             robot['type'] = value
           if key=="pos":
             robot['goal'] = self.parseStringTuple(value) 
+        robot["publisher"] = rospy.Publisher(f"/{robot['model_name']}/goal_found",String)
         robots[i] = robot
     except ValueError:
       raise ValueError("Invalid robot JSON")
@@ -227,6 +230,7 @@ class PyMonitor:
       r['surface'] = self.createRobot(robot['type'],scale,resolution)
       r["name"] = robot['model_name']
       r["goal"] = robot.get('goal',None)
+      r["publisher"] = robot["publisher"]
       if r["goal"] != None:
         r["goal"] = (r["goal"][0],r["goal"][1],ELEVATION if r["type"]=="uav" else 0)
       r["pos"] = None
@@ -253,33 +257,10 @@ class PyMonitor:
     z=resp_coordinates.pose.position.z
     return (x,y,z),self.worldToPixel(x,y,self.map_msg.info.origin.position.x,self.map_msg.info.origin.position.y,self.map_msg.info.resolution,self.scale)
   
-  '''
-  def publishGoal(self,robot):
-
-    if robot["goal"] is not None:
-      if robot["type"] == "ugv":
-        topic = f'/{robot["name"]}{UGV_GOAL_TOPIC}'
-      if robot["type"] == "uav":
-        topic = f'/{robot["name"]}{UAV_GOAL_TOPIC}'
-      pub = rospy.Publisher(topic, PoseStamped, queue_size=10)
-      pub.publish(self.createGoal(*robot["goal"]))  
-  '''
   def publishGoal(self,robot):
     if robot["goal"] is not None:
-      rospy.ServiceProxy(f"{robot['name']}/roschain/submit_message",SubmitTransaction)(SubmitTransactionRequest(
-        'targets',
-        json.dumps(
-        {
-          "node_id":robot["name"],
-          "timecreated":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-          "pos_x":robot["goal"][0],
-          "pos_y":robot["goal"][1],
-          "needed_uav":NEEDED_UAVS,
-          "needed_ugv":NEEDED_UGVS
-          
-        })
-      )
-    )
+      print(robot)
+      robot['publisher'].publish(f'{robot["goal"][0]},{robot["goal"][1]},{NEEDED_UAVS},{NEEDED_UGVS}')
 
   def watchForGoal(self,robot):
     if robot["goal"] is not None and self.inTolerance(*robot["loc"],*robot["goal"],TOLERANCE):
@@ -317,8 +298,6 @@ class PyMonitor:
       try:
         #update robot coordinates
         t["loc"],t["pos"] = self.updateRobotCoordinates(t)
-        #prodcasting goal to robot is exist
-        #self.publishGoal(t)
         #check goal status
         t["goal"] = self.watchForGoal(t)  
         #rendre goal

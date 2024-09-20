@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS states (
 );
 CREATE TABLE IF NOT EXISTS targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid TEXT NOT NULL,
     node_id TEXT NOT NULL,
     timecreated TEXT NOT NULL,
     pos_x REAL NOT NULL,

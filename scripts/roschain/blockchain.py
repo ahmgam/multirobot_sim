@@ -544,6 +544,18 @@ class Blockchain:
             data_queue = self.fix_last_block(data_queue)
         self.add_block(data_queue)
             
+    def get_buffered_data(self):
+        data = []
+        for item in self.buffer.queue:
+            data.append({
+                "meta":{
+                    "hash":item["alt_key"],
+                    "item_table":item["message"]["table_name"],
+                },
+                "data":item["message"]["data"],
+                "committed":False
+            })
+        return data
     def add_block(self,data_queue):
         
         #get all transactions between start and end id
@@ -635,7 +647,8 @@ class Blockchain:
         blockchain = []
         for i in range(start_id,end_id+1):
             meta , item = self.get_transaction(i)
-            blockchain.append({"meta":meta,"data":item})
+            blockchain.append({"meta":meta,"data":item,"committed":True})
+        blockchain.extend(self.get_buffered_data())
         return blockchain
 
     def __get_previous_hash(self,last_transaction_id=None):
