@@ -211,7 +211,7 @@ class TaskAllocationManager:
         x,y,needed_uavs,needed_ugvs = float(splitted[0]),float(splitted[1]),int(splitted[2]),int(splitted[3])
         goal_uuid = str(uuid.uuid4())
         self.add_goal(x,y,needed_uavs,needed_ugvs,goal_uuid)
-        self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:publishing,target")
+        self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:publishing,target,started")
         
     def getParameters(self):
         loginfo(f"task_allocator: getting namespace")
@@ -315,7 +315,8 @@ class TaskAllocationManager:
                 self.handle_record(record)
         else:
             if record['meta']['hash'] in self.buffered_hashes:
-                self.buffered_hashes.remove(record['meta']['hash'])
+                #self.buffered_hashes.remove(record['meta']['hash'])
+                pass
             else:
                 self.handle_record(record)
             #update last id 
