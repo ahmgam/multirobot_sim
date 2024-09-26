@@ -10,6 +10,8 @@
     <arg name="port"/>
     <arg name="min_nodes_num"/>
     <arg name="secret"/>
+    <arg name="update_interval" default="10"/>
+    <arg name="timeout_interval" default="30"/>
 
     <!-- env variables-->
     <env name="GAZEBO_MODEL_PATH" value="${GAZEBO_MODEL_PATH}:$(find rotors_gazebo)/models"/>
@@ -60,6 +62,7 @@
         <node name="task_allocation" pkg="multirobot_sim" type="task_allocation.py" output="screen">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="update_interval" value="$(arg update_interval)"/>
             <param name="odom_topic" value="/$(arg node_id)/odometry_sensor1/odometry"/>
         </node>
         <!-- robot state publisher-->
@@ -74,5 +77,6 @@
             <arg name="port" value="$(arg port)"/>
             <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
             <arg name="secret" value="$(arg secret)"/>
+            <arg name="timeout_interval" value="$(arg timeout_interval)"/>
         </include>
 </launch>

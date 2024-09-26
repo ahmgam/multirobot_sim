@@ -11,9 +11,10 @@ import rospy
 import traceback
 
 class SessionManager:
-    def __init__(self,node_id):
+    def __init__(self,node_id,node_type):
         #define session manager
         self.node_id = node_id
+        self.node_type= node_type
         self.discovery_sessions =OrderedDict()
         self.connection_sessions = OrderedDict()
         self.node = rospy.init_node("session_manager", anonymous=True)
@@ -26,7 +27,13 @@ class SessionManager:
         keys  = self.make_function_call(self.key_store,"get_rsa_key")
         self.pk = keys["pk"]
         self.sk = keys["sk"]
-        self.node_states = OrderedDict({self.node_id:{"pk":self.pk,"last_active":mktime(datetime.now().timetuple())}})
+        self.node_states = OrderedDict({self.node_id:{
+            "pk":self.pk,
+            "last_active":mktime(datetime.now().timetuple()),
+            "node_id":self.node_id,
+            "node_type":self.node_type,
+            "custom_data":None
+            }})
         self.refresh_node_state_table()
         rospy.loginfo(f"{self.node_id}: SessionManager:Initializing sessions service")
         self.server = rospy.Service(f"/{self.node_id}/sessions/call", FunctionCall, self.handle_function_call)
@@ -156,10 +163,23 @@ class SessionManager:
         response = {}
         for key,value in self.node_states.items():
             if value["last_active"] > mktime(datetime.now().timetuple())-60:
-                response[key] = value["pk"]
+                response[key] = {
+                    "pk":value["pk"],
+                    "custom_data":value.get("custom_data",None),
+                    "node_id":key,
+                    "node_type":value["node_type"]
+                }
         return response
+
     
-    
+    def update_custom_data(self,node_id,custom_data):
+        if node_id in self.node_states.keys():
+            if not self.node_states[node_id].get("custom_data",None):
+                self.node_states[node_id]["custom_data"] = custom_data
+            else:
+                if self.node_states[node_id]["custom_data"]["last_updated"] < custom_data["last_updated"]:
+                    self.node_states[node_id]["custom_data"] = custom_data
+        
     def update_node_state_table(self,table):
         #refresh node state table
         self.refresh_node_state_table()
@@ -169,9 +189,10 @@ class SessionManager:
             if key in self.node_states.keys():
                 #update last call timestamp
                 self.node_states[key]["last_active"] = mktime(datetime.now().timetuple())
-                continue
-            #update last call timestamp
-            self.node_states[key] = {"pk":value,"last_active":mktime(datetime.now().timetuple())}
+                if key != self.node_id and value.get("custom_data",None):
+                    self.update_custom_data(key,value["custom_data"])
+            else:
+                self.node_states[key]= value
             
     def compare_node_state_table(self,table):
         #refresh node state table
@@ -192,7 +213,13 @@ class SessionManager:
             if value["node_id"] in self.node_states.keys():
                 continue
             else:
-                self.node_states[value["node_id"]] = {"pk":value["pk"],"last_active":mktime(datetime.now().timetuple())}
+                self.node_states[value["node_id"]] = {
+                    "pk":value["pk"],
+                    "last_active":mktime(datetime.now().timetuple()),
+                    "node_id":value["node_id"],
+                    "node_type":value["node_type"],
+                    "custom_data":None
+                    }
                 
     def get_connection_sessions(self):
         return {key:value for key,value in  self.connection_sessions.items() if value["status"] == "active"}
@@ -206,8 +233,14 @@ class SessionManager:
 if __name__ == "__main__":
     ns = rospy.get_namespace()
     try :
-        node_id= rospy.get_param(f'{ns}roschain/node_id') # node_name/argsname
+        node_id= rospy.get_param(f'{ns}session/node_id') # node_name/argsname
     except rospy.ROSInterruptException:
         raise rospy.ROSInterruptException("Invalid arguments : node_id")
-    session = SessionManager(node_id)
+    try:
+        node_type = rospy.get_param(f'{ns}session/node_type')
+    except rospy.ROSInterruptException:
+        raise rospy.ROSInterruptException("Invalid arguments : node_type")
+    if node_type == None or node_id == None:
+        raise rospy.ROSInterruptException("Invalid arguments : node_id or node_type")
+    session = SessionManager(node_id,node_type)
     rospy.spin()

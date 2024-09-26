@@ -1,29 +1,25 @@
 <launch>
   <!--Arguments-->
-  <arg name="mav_name" default="firefly"/>
   <arg name="world_file" value="/home/gemy/robot_ws/src/multirobot_sim/worlds/testworld.world"/>
   <arg name="map_file" default="/home/gemy/robot_ws/src/multirobot_sim/maps/map.yaml"/>
   <arg name="enable_logging" default="false" />
   <arg name="enable_ground_truth" default="true" />
-  <arg name="log_file" default="$(arg mav_name)" />
+  <arg name="log_file" default="firefly" />
   <arg name="debug" default="false"/>
-  <arg name="gui" default="true"/>
+  <arg name="gui" default="false"/>
   <arg name="paused" default="true"/>
-  <arg name="uav_name_1" default="uav1"/>
-  <arg name="uav_name_2" default="uav2"/>
   <arg name="uav_y_1" default="-3.0"/>
   <arg name="uav_y_2" default="0.0"/>
   <arg name="elevation" default="1.0"/>
   <arg name="verbose" default="false"/>
-  <arg name="model" default="waffle" doc="model type [burger, waffle, waffle_pi]"/>
-  <arg name="ugv_name_1" default="ugv1"/>
-  <arg name="ugv_name_2" default="ugv2"/>
   <arg name="ugv_x_1" default="1.0"/>
   <arg name="ugv_x_2" default="2.0"/>
   <arg name="endpoint" default="localhost"/>
   <arg name="port" default="1883"/>
-  <arg name="min_nodes_num" default="1"/>
+  <arg name="min_nodes_num" default="4"/>
   <arg name="secret" default="f051a253c62a4829"/>
+  <arg name="update_interval" default="60"/>
+  <aeg name="timeout_interval" default="300"/>
   <!-- Load the world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world_file)" />
@@ -34,32 +30,71 @@
   </include>
   <!-- Spawn uav 1-->
   <include file="$(find multirobot_sim)/launch/uav.launch">
-    <arg name="node_id" value="$(arg uav_name_1)"/>
-    <arg name="mav_name" value="$(arg mav_name)"/>
+    <arg name="node_id" value="uav1"/>
+    <arg name="mav_name" value="firefly"/>
     <arg name="x" value="1.0"/>
-    <arg name="y" value="$(arg uav_y_1)"/>
+    <arg name="y" value="0.0"/>
     <arg name="z" value="$(arg elevation)"/>
     <arg name="endpoint" value="$(arg endpoint)"/>
     <arg name="port" value="$(arg port)"/>
     <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
     <arg name="secret" value="$(arg secret)"/>
+    <arg name="update_interval" value="$(arg update_interval)"/>
   </include>
 
-   <!-- Spawn the ugv 1-->
-  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
-    <arg name="node_id" value="$(arg ugv_name_1)"/>
-    <arg name="model" value="$(arg model)"/>
-    <arg name="x" value="$(arg ugv_x_1)"/>
+  <!-- Spawn uav 2-->
+  <include file="$(find multirobot_sim)/launch/uav.launch">
+    <arg name="node_id" value="uav2"/>
+    <arg name="mav_name" value="firefly"/>
+    <arg name="x" value="1.0"/>
+    <arg name="y" value="1.0"/>
+    <arg name="z" value="$(arg elevation)"/>
     <arg name="endpoint" value="$(arg endpoint)"/>
     <arg name="port" value="$(arg port)"/>
     <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
     <arg name="secret" value="$(arg secret)"/>
+    <arg name="update_interval" value="$(arg update_interval)"/>
+  </include>
+    <!-- Spawn uav 3-->
+  <include file="$(find multirobot_sim)/launch/uav.launch">
+    <arg name="node_id" value="uav3"/>
+    <arg name="mav_name" value="firefly"/>
+    <arg name="x" value="1.0"/>
+    <arg name="y" value="2.0"/>
+    <arg name="z" value="$(arg elevation)"/>
+    <arg name="endpoint" value="$(arg endpoint)"/>
+    <arg name="port" value="$(arg port)"/>
+    <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+    <arg name="secret" value="$(arg secret)"/>
+    <arg name="update_interval" value="$(arg update_interval)"/>
+  </include>
+   <!-- Spawn the ugv 1-->
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="node_id" value="ugv1"/>
+    <arg name="model" value="waffle"/>
+    <arg name="x" value="-1.0"/>
+    <arg name="endpoint" value="$(arg endpoint)"/>
+    <arg name="port" value="$(arg port)"/>
+    <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+    <arg name="secret" value="$(arg secret)"/>
+    <arg name="update_interval" value="$(arg update_interval)"/>
+  </include>
+      <!-- Spawn the ugv 2-->
+  <include file="/home/gemy/robot_ws/src/multirobot_sim/launch/ugv.launch">
+    <arg name="node_id" value="ugv2"/>
+    <arg name="model" value="waffle"/>
+    <arg name="x" value="-2.0"/>
+    <arg name="endpoint" value="$(arg endpoint)"/>
+    <arg name="port" value="$(arg port)"/>
+    <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
+    <arg name="secret" value="$(arg secret)"/>
+    <arg name="update_interval" value="$(arg update_interval)"/>
   </include>
   <!-- Map server -->
   <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
   <!--Monitoring package-->
   <node pkg="multirobot_sim" type="pymonitor.py" name="pymonitor" output="screen" required="true">
-    <param name="robots" value="name:uav1,,type:uav|name:ugv1,,type:ugv"/>
+    <param name="robots" value="name:uav1,,type:uav|name:uav2,,type:uav|name:uav3,,type:uav|name:ugv1,,type:ugv|name:ugv2,,type:ugv"/>
     <param name="map" value="map"/>
     <param name="size" value="(600,600)"/>
   </node>

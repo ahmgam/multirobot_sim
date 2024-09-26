@@ -69,6 +69,7 @@ add_service_files(
   AddGoal.srv
   DatabaseQuery.srv
   FunctionCall.srv
+  UpdateCustomData.srv
 )
 
 ## Generate actions in the 'action' folder

@@ -18,6 +18,8 @@ class HeartbeatProtocol:
         self.DEBUG = DEBUG
         #define heartbeat interval
         self.heartbeat_interval = 5
+        #define custom data
+        self.custom_data = None
         #define node
         self.node = init_node("heartbeat_protocol", anonymous=True)
         #define key store proxy

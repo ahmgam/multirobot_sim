@@ -7,6 +7,7 @@ from datetime import datetime
 import numpy as np
 from std_srvs.srv import Trigger
 from multirobot_sim.msg import NavigationActionAction,NavigationActionGoal
+from multirobot_sim.srv import UpdateCustomData
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import PoseStamped,Point
@@ -188,6 +189,9 @@ class TaskAllocationManager:
         loginfo(f"{self.node_id}: Task_allocator: Initializing get_records service client")
         self.submit_message = ServiceProxy(f'/{self.node_id}/roschain/submit_message',SubmitTransaction)
         self.submit_message.wait_for_service(timeout=25)
+        loginfo(f"{self.node_id}: Task_allocator: Initializing update custom data service client")
+        self.update_custom_data = ServiceProxy(f'/{self.node_id}/roschain/update_custom_data',UpdateCustomData)
+        self.update_custom_data.wait_for_service(timeout=25)
         loginfo(f"{self.node_id}: Task_allocator: Initializing submit_message service client")
         self.target_discovery = Service(f'/{self.node_id}/add_goal',AddGoal,lambda data: self.add_goal(data))
         loginfo(f"{self.node_id}: Task_allocator: Initializing add_goal service")
@@ -263,10 +267,31 @@ class TaskAllocationManager:
         odom = wait_for_message(self.odom_topic, Odometry)
         self.pos_x = odom.pose.pose.position.x
         self.pos_y = odom.pose.pose.position.y
+        self.update_custom_data(json.dumps({"pos_x":self.pos_x,"pos_y":self.pos_y}))
 
+    def is_complete_pos_data(self):
+        for robot in self.robots.values():
+            if robot['pos_x'] == None or robot['pos_y'] == None:
+                return False
+        return True
+    def handle_state_table(self,table):
+        for key,value in table.items():
+            if key not in self.robots.keys():
+                self.robots[key] = {
+                    "node_id":key,
+                    "pos_x":float(value["custom_data"]["data"].get("pos_x")) if value.get("custom_data") != None else None,
+                    "pos_y":float(value["custom_data"]["data"].get("pos_y"))if value.get("custom_data") != None else None,
+                    "node_type":value["node_type"]
+                }
+            else:
+                self.robots[key]["pos_x"] = float(value["custom_data"]["data"].get("pos_x")) if value.get("custom_data") != None else None
+                self.robots[key]["pos_y"] = float(value["custom_data"]["data"].get("pos_y"))if value.get("custom_data") != None else None
+            if key not in self.idle.keys():
+                self.idle[key] = True
     def sync_records(self):
         #get new records from blockchain service
         records = self.get_blockchain_records(self.last_id)
+        self.handle_state_table(json.loads(records.node_state_table))
         for record in records.transactions:
             record = json.loads(record)
             #record = list(record.values())[0]
@@ -285,7 +310,6 @@ class TaskAllocationManager:
             self.log_publisher.publish(f"{self.node_id}:{mktime(datetime.now().timetuple())}:received,{record['data']['node_id']},target,{record['data']['uuid']}")
         if record['meta']['item_table'] == 'task_records':
             data = record['data']
-            print(f"task record is {data} and ")
             if data['record_type'] == 'commit':
                 self.idle[data['node_id']] = False
             else:
@@ -335,8 +359,11 @@ class TaskAllocationManager:
             if record['record_type'] == 'commit':
                 if self.robots[record['node_id']]['node_type'] == 'uav':
                     committed_uav += 1
-                if self.robots[record['node_id']]['node_type'] == 'ugv':
+                elif self.robots[record['node_id']]['node_type'] == 'ugv':
                     committed_ugv += 1
+                else:
+                    print(f"Invalid robot type {self.robots[record['node_id']]['node_type']}")
+                    
         if committed_ugv == req_ugv and committed_uav == req_uav:
             return True
         else:
@@ -629,10 +656,14 @@ class TaskAllocationManager:
         #check if time interval is reached since last state update
         if (datetime.now() - self.last_state).total_seconds() > self.update_interval:
             self.last_state = datetime.now()
-            self.submit_node_state() 
-            loginfo(f"{self.node_id}: Task_allocator: Node state submitted")
+            #self.submit_node_state() 
+            #loginfo(f"{self.node_id}: Task_allocator: Node state submitted")
         #sync the robot with blockchain
         self.sync_records()
+        
+        if not self.is_complete_pos_data():
+            loginfo(f"{self.node_id}: Task_allocator: Waiting for all robots to send their positions")
+            return
         #check if robot it idle
         if self.ongoing_task != None:
             self.check_ongoing_task()
@@ -655,6 +686,7 @@ class TaskAllocationManager:
             self.commmit_to_target(target_id)
             return
         if not self.is_task_fully_committed(record['target_id']):
+            loginfo(f"{self.node_id}: Task_allocator: Task is not fully committed, {self.tasks[record['target_id']]}@@@")
             return
         
         loginfo(f"{self.node_id}: Task_allocator: Task is fully committed@@@")

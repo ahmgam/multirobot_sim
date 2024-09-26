@@ -207,6 +207,7 @@ class SBFT:
         self.ongoing_view = view_id
         #get node_ids 
         node_ids = self.make_function_call(self.sessions,"get_node_state_table")
+        node_ids = {node_id:node["pk"] for node_id,node in node_ids.items()}
         #start time
         start_time = mktime(datetime.datetime.now().timetuple())
         #create view
@@ -623,7 +624,7 @@ if __name__ == "__main__":
         raise ROSInterruptException("Invalid arguments : node_type")
     
     try :
-        timeout_interval= get_param(f'{ns}consensus/timeout_interval',10) # node_name/argsname
+        timeout_interval= get_param(f'{ns}consensus/timeout_interval',300) # node_name/argsname
         loginfo(f"discovery: Getting timeout_interval argument, and got : {timeout_interval}")
     except ROSInterruptException:
         raise ROSInterruptException("Invalid arguments : timeout_interval")

@@ -3,7 +3,7 @@ import json
 import datetime
 from rospy import init_node,get_param,loginfo,get_namespace,spin,ROSInterruptException,Service,ServiceProxy,Publisher
 from time import mktime
-from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse,FunctionCall
+from multirobot_sim.srv import GetBCRecords,SubmitTransaction,GetBCRecordsResponse,SubmitTransactionResponse,FunctionCall,UpdateCustomData,UpdateCustomDataResponse
 from std_srvs.srv import Trigger,TriggerResponse
 from std_msgs.msg import String
 from random import choices,randint
@@ -42,7 +42,6 @@ class RosChain:
         #define blockchain service proxy 
         loginfo(f"{self.node_id}: ROSChain:Initializing blockchain service")
         self.blockchain = ServiceProxy(f"/{self.node_id}/blockchain/call", FunctionCall)
-        self.blockchain.wait_for_service(timeout=100)
         #define consensus service
         loginfo(f"{self.node_id}: ROSChain:Initializing consensus service")
         self.consensus = MessagePublisher(f"/{self.node_id}/consensus/consensus_handler")
@@ -50,6 +49,8 @@ class RosChain:
         self.log_publisher = Publisher(f"/{self.node_id}/connector/send_log", String, queue_size=10)
         #initialize ready service
         self.is_ready_service = Service(f"/{self.node_id}/roschain/is_ready",Trigger,self.is_ready)
+        #initialize update custom data service
+        self.update_custom_data_service = Service(f"/{self.node_id}/roschain/update_custom_data",UpdateCustomData,self.update_custom_data)
         #define records service
         loginfo(f"{self.node_id}: ROSChain:Initializing records service")
         self.get_record_service = Service(f"/{self.node_id}/roschain/get_records",GetBCRecords,lambda req: self.get_records(req))
@@ -81,6 +82,16 @@ class RosChain:
             return None
         return json.loads(response)
     
+    def update_custom_data(self,custom_data):
+        custom_data = {
+            "data":json.loads(custom_data.data)
+        }
+        custom_data["last_updated"] = mktime(datetime.datetime.now().timetuple())
+        try:
+            self.make_function_call(self.sessions,"update_custom_data",self.node_id,custom_data)
+            return UpdateCustomDataResponse(True)
+        except:
+            return UpdateCustomDataResponse(False)
     def submit_message(self,args):
         '''
         Send message to the given public key
@@ -114,8 +125,9 @@ class RosChain:
 
     def get_records(self,last_record):
         records = self.make_function_call(self.blockchain,"get_blockchain",last_record.last_trans_id)
+        state_table = json.dumps(self.make_function_call(self.sessions,"get_node_state_table"))
         records = [json.dumps(record) for record in records]
-        return GetBCRecordsResponse(records)
+        return GetBCRecordsResponse(transactions=records,node_state_table=state_table)
 
 #####################################
 # Main

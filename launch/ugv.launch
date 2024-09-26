@@ -11,6 +11,8 @@
   <arg name="port"/>
   <arg name="min_nodes_num"/>
   <arg name="secret"/>
+  <arg name="update_interval" default="10"/>
+  <arg name="timeout_interval" default="30"/>
   <!--Robot namespace-->
   <group ns="$(arg node_id)">
     <param name="robot_description" command="$(find xacro)/xacro --inorder $(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro" />
@@ -37,6 +39,7 @@
         <node name="task_allocation" pkg="multirobot_sim" type="task_allocation.py" output="screen">
             <param name="node_id" value="$(arg node_id)"/>
             <param name="node_type" value="$(arg node_type)"/>
+            <param name="update_interval" value="$(arg update_interval)"/>
             <param name="odom_topic" value="/$(arg node_id)/odom"/>
         </node>
     <!-- Load the controller -->
@@ -53,5 +56,6 @@
         <arg name="port" value="$(arg port)"/>
         <arg name="min_nodes_num" value="$(arg min_nodes_num)"/>
         <arg name="secret" value="$(arg secret)"/>
+        <arg name="timeout_interval" value="$(arg timeout_interval)"/>
     </include>
 </launch>

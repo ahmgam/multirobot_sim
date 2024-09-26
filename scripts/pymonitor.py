@@ -32,8 +32,8 @@ UAV_GOAL_TOPIC = "/goal"
 UGV_PATH_TOPIC = "path"
 UAV_PATH_TOPIC = "path"
 
-NEEDED_UAVS = 1
-NEEDED_UGVS = 1
+NEEDED_UAVS = 3
+NEEDED_UGVS = 2
 
 class PyMonitor:
   def __init__(self):

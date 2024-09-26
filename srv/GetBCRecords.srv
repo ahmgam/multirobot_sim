@@ -1,3 +1,4 @@
 int64 last_trans_id
 ---
+string node_state_table
 string[] transactions

@@ -60,6 +60,7 @@
         </node>  
         <node pkg="multirobot_sim" type="session.py" name="session" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
+            <param name="node_type" value="$(arg node_type)"/>
         </node> 
         <node pkg="multirobot_sim" type="database.py" name="database" output="screen" required="true">
             <param name="node_id" value="$(arg node_id)"/>
